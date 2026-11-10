@@ -229,7 +229,7 @@ td .rk{font-family:var(--f-display);font-weight:700;font-size:18px;color:var(--a
     <img class="crest" src="logo.png" alt="Escudo del club">
     <div>
       <div class="eyebrow">Cuaderno del cuerpo técnico</div>
-      <h1><span id="clubName">Mi equipo</span><button class="btn ghost sm" data-act="club" type="button">Cambiar nombre</button></h1>
+      <h1><span id="clubName">Mi equipo</span></h1>
     </div>
   </div>
   <div class="who" id="who"></div>
@@ -448,12 +448,14 @@ let raf=0; function render(){cancelAnimationFrame(raf);raf=requestAnimationFrame
 function doRender(){
  if($('#app').hidden)return;
  $('#clubName').textContent=club.name||'Mi equipo';
- const tabs=isAdmin()?[...TABS,['accesos','Accesos']]:TABS;
+ const tabs=[...TABS,['config','Configuración']];
  if(!tabs.some(t=>t[0]===tab))tab='resumen';
  $('#tabs').innerHTML=tabs.map(([k,l])=>`<button class="tab" role="tab" type="button" aria-selected="${tab===k}" data-act="tab" data-k="${k}">${l}${S[k]?`<span class="c">${S[k].length}</span>`:''}</button>`).join('');
  const conn=navigator.onLine?'<span class="pill ok"><span class="dot"></span>En línea</span>':'<span class="pill amber"><span class="dot"></span>Sin conexión · se guarda y sincroniza después</span>';
- $('#who').innerHTML=`${conn}${me?avatar(me.uid):''}<span>${esc(me?(me.displayName||me.email):'')}</span><button class="btn ghost sm" type="button" data-act="logout">Salir</button>`;
- $('#view').innerHTML=({resumen:vResumen,players:vPlayers,sessions:vSessions,tests:vTests,injuries:vInjuries,routines:vRoutines,matches:vMatches,accesos:vAccess}[tab])();
+ $('#who').innerHTML=`${conn}<button class="btn ghost sm me-btn" type="button" data-act="tab" data-k="config" aria-label="Abrir configuración">${me?avatar(me.uid):''}<span>${esc(me?(me.displayName||me.email):'')}</span></button>`;
+ // No re-dibujar Configuración mientras se escribe en uno de sus campos.
+ if(tab==='config'&&document.activeElement&&document.activeElement.closest('#view form'))return;
+ $('#view').innerHTML=({resumen:vResumen,players:vPlayers,sessions:vSessions,tests:vTests,injuries:vInjuries,routines:vRoutines,matches:vMatches,config:vConfig}[tab])();
 }
 const addBtn=(col,label)=>`<button class="btn primary" type="button" data-act="add" data-col="${col}">+ ${label}</button>`;
 const rowActs=(col,id)=>`<div class="acts"><button class="btn ghost sm" type="button" data-act="edit" data-col="${col}" data-id="${id}">Editar</button><button class="btn ghost sm danger" type="button" data-act="del" data-col="${col}" data-id="${id}">Borrar</button></div>`;
@@ -561,13 +563,31 @@ function vMatches(){
   <div class="side"><div class="figs">${has?`<span class="score">${+m.gf} – ${+m.ga}</span>`:''}<span class="pill ${res[1]}">${res[0]}</span></div>${rowActs('matches',m.id)}</div>
   ${m.notes?`<div class="notes">${esc(m.notes)}</div>`:''}</div>`}).join('')}</div>`;
 }
-function vAccess(){
- const emails=(access&&access.emails)||[];const byMail={};Object.entries(members).forEach(([id,m])=>{if(m.email)byMail[m.email]={id,...m}});
- return `<div class="bar"><div><h2>Accesos</h2><p>Solo los mails de esta lista pueden ver y cargar datos. Esta sección la ves únicamente vos.</p></div></div>
- <div class="panel"><h3>Habilitar un mail</h3><div class="body"><form id="accFrm" class="form" novalidate><div class="fld full"><label for="accMail">Mail del integrante</label><input id="accMail" type="email" inputmode="email" autocapitalize="off" placeholder="nombre@gmail.com" required><span class="hint">Después pasale el link de la app: entra con "Crear cuenta" usando ese mismo mail.</span></div><div class="formacts"><button class="btn primary" type="submit">Habilitar</button></div></form></div></div>
- <div class="list">${emails.map(e=>{const m=byMail[e];const owner=e===access.owner;
-  return `<div class="row r-mail"><div class="main"><div class="t">${esc(m?m.name:e)}${owner?' <span class="pill acc">Administrador</span>':''}</div><div class="m"><span>${esc(e)}</span><span>${m?'Cuenta creada · último ingreso '+ago(m.seen):'Todavía no creó su cuenta'}</span></div></div>
-  ${owner?'':`<div class="acts"><button class="btn ghost sm danger" type="button" data-act="unmail" data-mail="${esc(e)}">Quitar acceso</button></div>`}</div>`}).join('')}</div>`;
+function vConfig(){
+ const admin=isAdmin();
+ let h=`<div class="bar"><div><h2>Configuración</h2><p>${admin?'Datos del equipo, accesos del cuerpo técnico y tu cuenta.':'Tu cuenta y datos del equipo.'}</p></div></div>`;
+ // Equipo
+ h+=`<div class="panel"><h3>Equipo</h3><div class="body">${admin
+  ?`<form id="clubFrm" class="form" novalidate><div class="fld full"><label for="clubIn">Nombre del equipo o categoría</label><input id="clubIn" value="${esc(club.name)}" placeholder="Ej: Primera división" required><span class="hint">Es el nombre que aparece arriba, al lado del escudo.</span></div><div class="formacts"><button class="btn primary" type="submit">Guardar nombre</button></div></form>`
+  :`<div class="mini"><div><span style="color:var(--muted)">Nombre</span><span>${esc(club.name||'Mi equipo')}</span></div></div><p class="hint" style="margin:8px 0 0;font-size:13px;color:var(--muted)">Solo el administrador puede cambiar los datos del equipo.</p>`}</div></div>`;
+ // Accesos
+ if(admin){
+  const emails=(access&&access.emails)||[];const byMail={};Object.entries(members).forEach(([id,m])=>{if(m.email)byMail[m.email]={id,...m}});
+  h+=`<div class="panel"><h3>Accesos del cuerpo técnico <small>${emails.length} habilitados</small></h3><div class="body" style="display:grid;gap:14px">
+  <p style="margin:0;color:var(--muted);font-size:14px">Solo los mails de esta lista pueden ver y cargar datos. Esta parte la ves únicamente vos.</p>
+  <form id="accFrm" class="form" novalidate><div class="fld full"><label for="accMail">Habilitar un mail</label><input id="accMail" type="email" inputmode="email" autocapitalize="off" placeholder="nombre@gmail.com" required><span class="hint">Después pasale el link de la app: entra con "Crear cuenta" usando ese mismo mail.</span></div><div class="formacts"><button class="btn primary" type="submit">Habilitar</button></div></form>
+  <div class="list">${emails.map(e=>{const m=byMail[e];const owner=e===access.owner;
+   return `<div class="row r-mail"><div class="main"><div class="t">${esc(m?m.name:e)}${owner?' <span class="pill acc">Administrador</span>':''}</div><div class="m"><span>${esc(e)}</span><span>${m?'Cuenta creada · último ingreso '+ago(m.seen):'Todavía no creó su cuenta'}</span></div></div>
+   ${owner?'':`<div class="acts"><button class="btn ghost sm danger" type="button" data-act="unmail" data-mail="${esc(e)}">Quitar acceso</button></div>`}</div>`}).join('')}</div></div></div>`;
+ }
+ // Mi cuenta
+ h+=`<div class="panel"><h3>Mi cuenta</h3><div class="body" style="display:grid;gap:14px">
+  <form id="meFrm" class="form" novalidate><div class="fld"><label for="meName">Tu nombre</label><input id="meName" value="${esc(me.displayName||'')}" autocomplete="name" required><span class="hint">Así te ven los demás en la actividad.</span></div><div class="fld"><span class="lb">Mail</span><input value="${esc(me.email)}" disabled aria-label="Mail"></div><div class="formacts"><button class="btn primary" type="submit">Guardar nombre</button></div></form>
+  <div class="formacts" style="justify-content:flex-start;border-top:1px solid var(--line);padding-top:14px"><button class="btn" type="button" data-act="pwreset">Cambiar contraseña</button><button class="btn danger" type="button" data-act="logout">Cerrar sesión</button></div>
+ </div></div>`;
+ // Instalar
+ h+=`<div class="panel"><h3>Instalar en el teléfono</h3><div class="body"><ol style="margin:0;padding-left:20px;display:grid;gap:4px;font-size:14px"><li>Abrí la app en <b>Safari</b> (en Android, en Chrome).</li><li>Tocá el botón <b>Compartir</b> (en Android, el menú ⋮).</li><li>Elegí <b>Agregar a inicio</b>.</li></ol></div></div>`;
+ return h;
 }
 
 /* ---------- detalle de jugador ---------- */
@@ -638,11 +658,6 @@ function del(btn){
  if(!btn.classList.contains('armed')){btn.classList.add('armed');btn.textContent='¿Confirmar?';setTimeout(()=>{btn.classList.remove('armed');btn.textContent='Borrar'},4000);return}
  const {col,id}=btn.dataset;deleteDoc(doc(db,col,id)).catch(err=>toast(errMsg(err)));toast('Borrado');
 }
-function openClub(){
- editing=null;$('#mTitle').textContent='Nombre del equipo';
- $('#mBody').innerHTML=`<form class="form" id="clubFrm" novalidate><div class="fld full"><label for="clubIn">Equipo o categoría</label><input id="clubIn" value="${esc(club.name)}" placeholder="Ej: Primera división" required></div><div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button class="btn primary" type="submit">Guardar</button></div></form>`;
- showModal();
-}
 
 /* ---------- eventos ---------- */
 document.addEventListener('click',e=>{
@@ -655,7 +670,7 @@ document.addEventListener('click',e=>{
  else if(a==='del'){e.stopPropagation();del(b)}
  else if(a==='player'){if(e.target.closest('.acts'))return;openPlayer(b.dataset.id)}
  else if(a==='close')closeModal();
- else if(a==='club')openClub();
+ else if(a==='pwreset'){if(me)sendPasswordResetEmail(auth,me.email).then(()=>toast('Te mandamos un mail para elegir una contraseña nueva.')).catch(ex=>toast(authMsg(ex)))}
  else if(a==='chk'){const g=document.querySelector(`[data-group="${b.dataset.k}"]`);g.querySelectorAll('input').forEach(c=>{c.checked=b.dataset.mode==='all'||(b.dataset.mode==='avail'&&availability(c.value)[0]==='Disponible')});updCount(b.dataset.k)}
  else if(a==='mode')showLogin(b.dataset.mode);
  else if(a==='logout'){signOut(auth)}
@@ -677,8 +692,12 @@ document.addEventListener('submit',e=>{
  const id=e.target.id;
  if(id==='authFrm')return onAuthForm(e);
  if(id==='frm')return submitForm(e);
- if(id==='clubFrm'){e.preventDefault();const name=$('#clubIn').value.trim();if(!name)return;
-  setDoc(doc(db,'config','club'),{name,editBy:me.uid,editAt:new Date().toISOString()}).catch(err=>toast(errMsg(err)));closeModal();toast('Nombre actualizado')}
+ if(id==='clubFrm'){e.preventDefault();const name=$('#clubIn').value.trim();if(!name){toast('Escribí el nombre del equipo.');return}
+  document.activeElement&&document.activeElement.blur();
+  setDoc(doc(db,'config','club'),{name,editBy:me.uid,editAt:new Date().toISOString()}).catch(err=>toast(errMsg(err)));toast('Nombre del equipo actualizado')}
+ if(id==='meFrm'){e.preventDefault();const name=$('#meName').value.trim();if(!name){toast('Escribí tu nombre.');return}
+  document.activeElement&&document.activeElement.blur();
+  updateProfile(auth.currentUser,{displayName:name}).then(()=>{me=auth.currentUser;return setDoc(doc(db,'members',me.uid),{name,email:me.email.toLowerCase(),seen:new Date().toISOString()})}).then(()=>{toast('Nombre actualizado');render()}).catch(err=>toast(errMsg(err)))}
  if(id==='accFrm'){e.preventDefault();const mail=$('#accMail').value.trim().toLowerCase();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)){toast('Escribí un mail válido.');return}
   if(access.emails.includes(mail)){toast('Ese mail ya tiene acceso.');return}
