@@ -1,0 +1,41 @@
+rules_version = '2';
+// Reglas de seguridad de la base de datos.
+// Se pegan en Firebase → Firestore Database → Reglas.
+// Reemplazá TU_MAIL por el mail del administrador, todo en minúsculas.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function isOwner() {
+      return signedIn() && myEmail() == 'TU_MAIL';
+    }
+    function isStaff() {
+      return isOwner() ||
+        (signedIn() && myEmail() in get(/databases/$(database)/documents/config/access).data.emails);
+    }
+
+    // Lista de mails habilitados: la leen todos, la cambia solo el administrador.
+    match /config/access {
+      allow read: if isStaff();
+      allow write: if isOwner();
+    }
+    match /config/club {
+      allow read, write: if isStaff();
+    }
+    // Perfil de cada integrante: cada uno escribe solo el suyo.
+    match /members/{uid} {
+      allow read: if isStaff();
+      allow write: if isStaff() && request.auth.uid == uid;
+    }
+    // Datos del equipo.
+    match /{col}/{id} {
+      allow read, write: if isStaff()
+        && col in ['players', 'sessions', 'tests', 'injuries', 'routines', 'matches'];
+    }
+  }
+}
