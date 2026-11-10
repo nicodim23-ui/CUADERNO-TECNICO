@@ -12,16 +12,17 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Cuaderno">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#161F1A" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#163C84" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#122F69" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
-/* Layout: cabecera tipo planilla de club, pestañas fijas, listas operativas debajo */
+/* Layout: banda azul del club con el escudo, pestañas fijas, listas operativas debajo */
 :root{
-  --bg:#F2F4EF; --surface:#FFFFFF; --sunk:#E8ECE5; --ink:#17201B; --muted:#5A685F; --line:#D6DDD4;
-  --accent:#1E6A44; --accent-ink:#FFFFFF; --accent-soft:#DCEBE1;
+  --bg:#F1F3F8; --surface:#FFFFFF; --sunk:#E6EAF2; --ink:#141B2B; --muted:#586379; --line:#D4DAE6;
+  --accent:#163C84; --accent-ink:#FFFFFF; --accent-soft:#DDE5F5;
+  --brand:#163C84; --brand-ink:#FFFFFF; --brand-muted:rgba(255,255,255,.74); --brand-hover:rgba(255,255,255,.14);
   --ok:#2C7A4C; --ok-soft:#DDEFE3; --warn:#C2410C; --warn-soft:#FBE4D8; --amber:#9A6510; --amber-soft:#F6EBCF;
   --shadow:0 10px 30px rgba(20,35,25,.18);
   --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
@@ -31,8 +32,9 @@
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){:root{
-  --bg:#0F1512; --surface:#161F1A; --sunk:#1D2822; --ink:#E6EDE7; --muted:#93A398; --line:#2A372F;
-  --accent:#55B783; --accent-ink:#0B1510; --accent-soft:#1F3A2B;
+  --bg:#0C111D; --surface:#131A2A; --sunk:#1A2337; --ink:#E6EBF4; --muted:#93A0B8; --line:#25304A;
+  --accent:#7EA6FF; --accent-ink:#0B1020; --accent-soft:#1C2A4D;
+  --brand:#122F69; --brand-ink:#FFFFFF; --brand-muted:rgba(255,255,255,.7); --brand-hover:rgba(255,255,255,.12);
   --ok:#62C38F; --ok-soft:#1C3527; --warn:#F28C55; --warn-soft:#3A2116; --amber:#E2B456; --amber-soft:#382C14;
   --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark}}
 
@@ -40,7 +42,7 @@
 [hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-tap-highlight-color:transparent}
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--brand)}
 .wrap{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 button,input,select,textarea{font:inherit;color:inherit}
 input,select,textarea{font-size:16px} /* evita el zoom automático en iPhone */
@@ -48,9 +50,18 @@ input,select,textarea{font-size:16px} /* evita el zoom automático en iPhone */
 .num,.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 
 /* Cabecera */
-.top{background:var(--surface);border-bottom:1px solid var(--line)}
-.top .wrap{padding-block:18px 14px;display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end;justify-content:space-between}
-.club{min-width:0}
+.top{background:var(--brand);color:var(--brand-ink)}
+.top .wrap{padding-block:16px;display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between}
+.club{min-width:0;display:flex;align-items:center;gap:14px}
+.club>div{min-width:0}
+.crest{width:60px;height:60px;flex:none;filter:drop-shadow(0 2px 6px rgba(0,0,0,.25))}
+@media (max-width:480px){.crest{width:48px;height:48px}}
+.top .eyebrow{color:var(--brand-muted)}
+.top .who{color:var(--brand-muted)}
+.top .btn.ghost{color:var(--brand-muted)}
+.top .btn.ghost:hover{color:var(--brand-ink);background:var(--brand-hover)}
+.top .pill.ok{background:var(--brand-hover);color:var(--brand-ink)}
+.crest-lg{width:96px;height:96px;justify-self:center;filter:drop-shadow(0 4px 10px rgba(10,30,70,.25))}
 .eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
 .club h1{margin:2px 0 0;font-family:var(--f-display);font-weight:700;font-size:clamp(28px,6vw,42px);line-height:1;text-transform:uppercase;letter-spacing:.01em;text-wrap:balance;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .who{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);flex-wrap:wrap}
@@ -215,8 +226,11 @@ td .rk{font-family:var(--f-display);font-weight:700;font-size:18px;color:var(--a
 <div id="app" hidden>
 <div class="top"><div class="wrap">
   <div class="club">
-    <div class="eyebrow">Cuaderno del cuerpo técnico</div>
-    <h1><span id="clubName">Mi equipo</span><button class="btn ghost sm" data-act="club" type="button">Cambiar nombre</button></h1>
+    <img class="crest" src="logo.png" alt="Escudo del club">
+    <div>
+      <div class="eyebrow">Cuaderno del cuerpo técnico</div>
+      <h1><span id="clubName">Mi equipo</span><button class="btn ghost sm" data-act="club" type="button">Cambiar nombre</button></h1>
+    </div>
   </div>
   <div class="who" id="who"></div>
 </div></div>
@@ -243,7 +257,7 @@ const $=s=>document.querySelector(s);
 
 /* ---------- Firebase ---------- */
 if(!firebaseConfig.apiKey||firebaseConfig.apiKey.startsWith('PEGAR')){
-  gateScreen(`<div class="pitch" aria-hidden="true"></div><h1>Falta configurar</h1><p>Esta copia de la app todavía no está conectada a su base de datos. Completá <code>config.js</code> con los datos del proyecto de Firebase.</p>`);
+  gateScreen(`<img class="crest-lg" src="logo.png" alt="Escudo del club"><h1>Falta configurar</h1><p>Esta copia de la app todavía no está conectada a su base de datos. Completá <code>config.js</code> con los datos del proyecto de Firebase.</p>`);
   throw new Error('Sin configuración de Firebase');
 }
 const fb=initializeApp(firebaseConfig);
@@ -294,7 +308,7 @@ function authMsg(e){const c=(e&&e.code)||'';
 function gateScreen(html){$('#app').hidden=true;$('#gate').hidden=false;$('#gateCard').innerHTML=html}
 function showLogin(mode='login',msg=''){
  const reg=mode==='register', reset=mode==='reset';
- gateScreen(`<div class="pitch" aria-hidden="true"></div>
+ gateScreen(`<img class="crest-lg" src="logo.png" alt="Escudo del club">
  <div><div class="eyebrow">Cuaderno del cuerpo técnico</div><h1>${reg?'Crear cuenta':reset?'Recuperar contraseña':'Ingresar'}</h1></div>
  <p>${reg?'Usá el mail que le pasaste al administrador del equipo.':reset?'Te mandamos un mail con un link para elegir una contraseña nueva.':'Ingresá con el mail y la contraseña de tu cuenta.'}</p>
  <form id="authFrm" data-mode="${mode}" novalidate>
@@ -307,13 +321,13 @@ function showLogin(mode='login',msg=''){
  <div class="links">${mode==='login'?`<button class="linkbtn" type="button" data-act="mode" data-mode="register">Crear cuenta</button><button class="linkbtn" type="button" data-act="mode" data-mode="reset">Olvidé mi contraseña</button>`:`<button class="linkbtn" type="button" data-act="mode" data-mode="login">Volver a ingresar</button>`}</div>`);
 }
 function showVerify(){
- gateScreen(`<div class="pitch" aria-hidden="true"></div><h1>Confirmá tu mail</h1>
+ gateScreen(`<img class="crest-lg" src="logo.png" alt="Escudo del club"><h1>Confirmá tu mail</h1>
  <p>Te mandamos un mail a <b>${esc(me.email)}</b>. Abrí el link que llega (revisá también Spam) y después tocá el botón de abajo.</p>
  <button class="btn primary block" type="button" data-act="verified">Ya lo confirmé</button>
  <div class="links"><button class="linkbtn" type="button" data-act="resend">Reenviar mail</button><button class="linkbtn" type="button" data-act="logout">Salir</button></div>`);
 }
 function showDenied(){
- gateScreen(`<div class="pitch" aria-hidden="true"></div><h1>Sin acceso todavía</h1>
+ gateScreen(`<img class="crest-lg" src="logo.png" alt="Escudo del club"><h1>Sin acceso todavía</h1>
  <p>Tu cuenta <b>${esc(me.email)}</b> está creada, pero el administrador del equipo todavía no la habilitó. Pedile que agregue este mail en la sección Accesos.</p>
  <button class="btn primary block" type="button" data-act="retry">Volver a intentar</button>
  <div class="links"><button class="linkbtn" type="button" data-act="logout">Salir</button></div>`);
@@ -342,7 +356,7 @@ onAuthStateChanged(auth,user=>{
  startAccess();
 });
 function startAccess(){
- gateScreen(`<div class="pitch" aria-hidden="true"></div><h1>Cargando…</h1><p>Conectando con la base de datos del equipo.</p>`);
+ gateScreen(`<img class="crest-lg" src="logo.png" alt="Escudo del club"><h1>Cargando…</h1><p>Conectando con la base de datos del equipo.</p>`);
  const ref=doc(db,'config','access');
  let first=true;
  const u=onSnapshot(ref,snap=>{
