@@ -32,10 +32,14 @@ service cloud.firestore {
       allow read: if isStaff();
       allow write: if isStaff() && request.auth.uid == uid;
     }
-    // Datos del equipo.
+    // Rutinas enviadas a los jugadores: se abren con el link, sin cuenta.
+    match /public/{id} {
+      allow get: if true;
+      allow write: if isStaff();
+    }
+    // Datos del equipo (plantel, sesiones, planificación, gimnasio, etc.).
     match /{col}/{id} {
-      allow read, write: if isStaff()
-        && col in ['players', 'sessions', 'tests', 'injuries', 'routines', 'matches'];
+      allow read, write: if isStaff() && !(col in ['config', 'members', 'public']);
     }
   }
 }

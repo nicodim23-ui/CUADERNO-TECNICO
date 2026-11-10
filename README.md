@@ -10,7 +10,8 @@ App web para que el cuerpo técnico registre plantel, entrenamientos, tests, les
 
 | Archivo | Para qué sirve |
 |---|---|
-| `index.html` | La app completa |
+| `index.html` | Estructura y estilos de la app |
+| `app.js` | Funcionamiento de la app |
 | `config.js` | Datos del proyecto de Firebase |
 | `firestore.rules` | Reglas de seguridad (se pegan en la consola de Firebase) |
 | `manifest.webmanifest`, `*.png` | Nombre e ícono al instalarla en el teléfono |
