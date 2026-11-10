@@ -303,6 +303,7 @@ function doRender(){
  $('#clubName').textContent=club.name||'Mi equipo';
  const tabs=[...TABS,['config','Configuración']];
  if(!tabs.some(t=>t[0]===tab))tab='resumen';
+ $('#menuCur').textContent=(tabs.find(t=>t[0]===tab)||tabs[0])[1];
  const cnt=k=>k==='routines'?S.routines.filter(r=>!isGym(r)).length:['players','sessions','tests','injuries','matches'].includes(k)?S[k].length:null;
  $('#tabs').innerHTML=tabs.map(([k,l])=>{const c=cnt(k);return `<button class="tab" role="tab" type="button" aria-selected="${tab===k}" data-act="tab" data-k="${k}">${l}${c!=null?`<span class="c">${c}</span>`:''}</button>`}).join('');
  const conn=navigator.onLine?'<span class="pill ok"><span class="dot"></span>En línea</span>':'<span class="pill amber"><span class="dot"></span>Sin conexión · se guarda y sincroniza después</span>';
@@ -847,7 +848,8 @@ document.addEventListener('click',e=>{
  const b=e.target.closest('[data-act]');
  if(!b){if(e.target.id==='modal')closeModal();return}
  const a=b.dataset.act;
- if(a==='tab'){tab=b.dataset.k;try{localStorage.setItem('ct_tab',tab)}catch(_){};render();window.scrollTo({top:0})}
+ if(a==='menu'){const o=$('#nav').classList.toggle('open');b.setAttribute('aria-expanded',o);$('#menuLbl').textContent=o?'Cerrar':'Menú'}
+ else if(a==='tab'){$('#nav').classList.remove('open');$('#menuLbl').textContent='Menú';tab=b.dataset.k;try{localStorage.setItem('ct_tab',tab)}catch(_){};render();window.scrollTo({top:0})}
  else if(a==='add'){e.stopPropagation();openForm(b.dataset.col,null,{pre:b.dataset.pre,date:b.dataset.date})}
  else if(a==='edit'){e.stopPropagation();let key=b.dataset.col;if(key==='routines'){const r=S.routines.find(x=>x.id===b.dataset.id);if(r&&isGym(r))key='gymroutines'}closeDoc();openForm(key,b.dataset.id)}
  else if(a==='dup'){closeDoc();openForm('sessions',null,{copy:b.dataset.id})}
