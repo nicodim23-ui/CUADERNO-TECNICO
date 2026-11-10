@@ -3,12 +3,14 @@ import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWith
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
 
-const COLS=['players','sessions','tests','injuries','routines','matches','mesos','micros','gymlogs'];
-const NEW_COLS=['mesos','micros','gymlogs']; // necesitan las reglas nuevas de Firestore
+const COLS=['players','sessions','tests','injuries','routines','matches','mesos','micros','gymlogs','checkins'];
+const NEW_COLS=['mesos','micros','gymlogs','checkins']; // necesitan las reglas nuevas de Firestore
 const S={};COLS.forEach(c=>S[c]=[]);
 let club={name:''}, access=null, members={}, me=null, tab='resumen', testFilter='', injFilter='activas', attRange='30', gymFilter='', unsubs=[], rulesOld=false;
 const pubMatch=location.hash.match(/^#r-([A-Za-z0-9]{12,40})$/);
-const publicMode=!!pubMatch;
+const plMatch=location.hash.match(/^#j-([A-Za-z0-9]{12,40})$/);
+const publicMode=!!(pubMatch||plMatch);
+let wellDate='';
 const $=s=>document.querySelector(s);
 
 /* ---------- Firebase ---------- */
@@ -77,6 +79,14 @@ const sessNums=()=>{const m={};sessOrder().forEach((s,i)=>m[s.id]=i+1);return m}
 const sessTasks=s=>(Array.isArray(s.tasks)?s.tasks:[]).filter(t=>t&&t.name);
 const sessDuration=s=>{if(isNum(s.duration))return +s.duration;const t=sessTasks(s).reduce((a,x)=>a+(isNum(x.time)?+x.time:0),0);return t||null};
 const isGym=r=>r.kind==='Gimnasio';
+
+/* bienestar y RPE que carga cada jugador desde su link */
+const WELL=[['sleep','Sueño','Dormí muy mal','Dormí muy bien'],['fatigue','Cansancio','Muy cansado','Muy fresco'],['soreness','Dolor muscular','Mucho dolor','Sin dolor'],['stress','Estrés','Muy estresado','Muy tranquilo']];
+const wellTotal=c=>WELL.reduce((a,w)=>a+(isNum(c[w[0]])?+c[w[0]]:0),0);
+const wellOf=(pid,date)=>S.checkins.filter(c=>c.kind==='well'&&c.player===pid&&c.date===date).sort((a,b)=>(b.at||'').localeCompare(a.at||''))[0];
+const rpesOf=date=>S.checkins.filter(c=>c.kind==='rpe'&&c.date===date);
+const gymAll=()=>[...S.gymlogs,...S.checkins.filter(c=>c.kind==='rpe'&&c.activity==='Gimnasio').map(c=>({...c,duration:c.minutes,done:c.note,self:true}))];
+const playerUrl=t=>location.origin+location.pathname+'#j-'+t;
 
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2800)}
 function errMsg(e){const c=e&&e.code;
@@ -266,7 +276,7 @@ const SCHEMA={
   {k:'squad',l:'Convocados',t:'players',full:1},
   {k:'notes',l:'Notas del partido',t:'textarea',full:1,ph:'Goleadores, cambios, observaciones'}]}
 };
-const TABS=[['resumen','Resumen'],['players','Plantel'],['plan','Planificación'],['sessions','Sesiones'],['att','Asistencia'],['gym','Gimnasio'],['routines','Rutinas'],['tests','Tests'],['injuries','Lesiones'],['matches','Partidos']];
+const TABS=[['resumen','Resumen'],['players','Plantel'],['plan','Planificación'],['sessions','Sesiones'],['att','Asistencia'],['well','Bienestar'],['gym','Gimnasio'],['routines','Rutinas'],['tests','Tests'],['injuries','Lesiones'],['matches','Partidos']];
 const PARTS=['Entrada en calor','Parte principal','Vuelta a la calma'];
 const ROWDEF={
  tasks:{add:'+ Agregar tarea',label:'Tarea',cols:[
@@ -299,8 +309,8 @@ function doRender(){
  $('#who').innerHTML=`${conn}<button class="btn ghost sm me-btn" type="button" data-act="tab" data-k="config" aria-label="Abrir configuración">${me?avatar(me.uid):''}<span>${esc(me?(me.displayName||me.email):'')}</span></button>`;
  // No re-dibujar Configuración mientras se escribe en uno de sus campos.
  if(tab==='config'&&document.activeElement&&document.activeElement.closest('#view form'))return;
- const banner=rulesOld&&['plan','gym','resumen'].includes(tab)?`<div class="banner">Falta actualizar las reglas de Firebase para usar Planificación, Gimnasio y el envío de rutinas. Pedile al administrador que las actualice.</div>`:'';
- $('#view').innerHTML=banner+({resumen:vResumen,players:vPlayers,plan:vPlan,sessions:vSessions,att:vAtt,gym:vGym,tests:vTests,injuries:vInjuries,routines:vRoutines,matches:vMatches,config:vConfig}[tab])();
+ const banner=rulesOld&&['plan','gym','well','resumen'].includes(tab)?`<div class="banner">Falta actualizar las reglas de Firebase para usar Planificación, Gimnasio, Bienestar y los links de los jugadores. Pedile al administrador que las actualice.</div>`:'';
+ $('#view').innerHTML=banner+({resumen:vResumen,players:vPlayers,plan:vPlan,sessions:vSessions,att:vAtt,well:vWell,gym:vGym,tests:vTests,injuries:vInjuries,routines:vRoutines,matches:vMatches,config:vConfig}[tab])();
 }
 const addBtn=(key,label,extra='')=>`<button class="btn primary" type="button" data-act="add" data-col="${key}" ${extra}>+ ${label}</button>`;
 const colOf=key=>(SCHEMA[key]&&SCHEMA[key].col)||key;
@@ -334,6 +344,8 @@ function vResumen(){
  const sessBox=(s,label)=>`<div style="display:grid;gap:8px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><span><span class="eyebrow">${label} · Sesión N° ${NUM[s.id]}</span><br><b>${esc(s.type||'Sesión')}</b> · ${DOW[parse(s.date).getDay()]} ${fdy(s.date)}${s.time?' · '+esc(s.time)+' h':''}<br><span style="color:var(--muted)">${esc(s.focus||'Sin objetivo cargado')}</span></span><span class="mono">${sessDuration(s)?sessDuration(s)+' min':''}${load(s)!=null?' · '+load(s)+' UA':''}</span></div>
   <div class="tools"><button class="btn sm" type="button" data-act="sheet" data-id="${s.id}">Hoja de sesión</button><button class="btn sm" type="button" data-act="big" data-id="${s.id}">Pantalla grande</button><button class="btn sm" type="button" data-act="att" data-id="${s.id}">Asistencia</button></div></div>`;
  h+=`<div class="panel"><h3>Sesiones</h3><div class="body" style="display:grid;gap:14px">${nextS?sessBox(nextS,nextS.date===t?'Hoy':'Próxima'):''}${lastS&&lastS!==nextS?(nextS?'<div style="border-top:1px solid var(--line)"></div>':'')+sessBox(lastS,'Última'):''}${!nextS&&!lastS?`<p style="margin:0;color:var(--muted)">Todavía no hay sesiones cargadas.</p>`:''}</div></div>`;
+ {const ans=sortedPlayers().map(p=>({p,w:wellOf(p.id,t)})).filter(r=>r.w);const al=ans.filter(r=>WELL.some(w=>+r.w[w[0]]<=2));
+ h+=`<div class="panel"><h3>Bienestar de hoy <small>${ans.length} de ${n} respondieron</small></h3><div class="body">${al.length?`<div class="mini">${al.map(r=>`<div><span><b>${esc(r.p.name)}</b>${r.w.painZone?' · dolor: '+esc(r.w.painZone):''}</span><span class="pill warn">${WELL.filter(w=>+r.w[w[0]]<=2).map(w=>w[1]).join(', ')}</span></div>`).join('')}</div>`:`<p style="margin:0;color:var(--muted)">${ans.length?'Sin alertas: nadie marcó valores bajos.':'Todavía nadie cargó cómo llegó. Mandales su link desde la pestaña Bienestar.'}</p>`}</div></div>`}
  h+=`</div><div class="panel"><h3>Actividad del cuerpo técnico</h3><div class="body">${feed()}</div></div></div>`;
  if(!n)h=empty('Empecemos por el plantel','Cargá los jugadores primero. Después vas a poder registrar asistencia, tests, lesiones y convocatorias para cada uno.','players','Agregar jugador')+h;
  return h;
@@ -341,7 +353,7 @@ function vResumen(){
 function feed(){
  const L={players:'agregó a',sessions:'cargó la sesión',tests:'registró un test de',injuries:'registró una lesión de',routines:'creó la rutina',matches:'cargó el partido vs',mesos:'creó el mesociclo',micros:'creó el microciclo del',gymlogs:'registró gimnasio de'};
  const E={players:'editó a',sessions:'editó la sesión',tests:'editó un test de',injuries:'actualizó la lesión de',routines:'editó la rutina',matches:'editó el partido vs',mesos:'editó el mesociclo',micros:'editó el microciclo del',gymlogs:'editó el gimnasio de'};
- const items=[];COLS.forEach(c=>S[c].forEach(d=>{const ed=!!d.editAt;const when=d.editAt||d.at;if(!when)return;
+ const items=[];COLS.filter(c=>L[c]).forEach(c=>S[c].forEach(d=>{const ed=!!d.editAt;const when=d.editAt||d.at;if(!when)return;
   const obj=c==='players'||c==='routines'||c==='mesos'?d.name:c==='tests'||c==='injuries'||c==='gymlogs'?plName(d.player):c==='matches'?d.rival:c==='micros'?fd(d.start):(d.type||'')+' del '+fd(d.date);
   items.push({when,by:d.editBy||d.by,txt:(ed?E:L)[c],obj})}));
  items.sort((a,b)=>b.when.localeCompare(a.when));
@@ -453,17 +465,18 @@ function openPlayer(id){
  const matches=S.matches.filter(m=>Array.isArray(m.squad)&&m.squad.includes(id)).length;
  const facts=[['Posición',p.position],['Edad',a!=null?a+' años ('+fdy(p.birth)+')':''],['Pie hábil',p.foot],['Altura',isNum(p.height)?p.height+' cm':''],['Peso',isNum(p.weight)?p.weight+' kg':''],['Contacto',p.contact],['Asistencia últimos 30 días',ap!=null?ap+'%':'Sin registros'],['Convocatorias',String(matches)],['Gimnasio',p.gym==='Sí'?['Sí',isNum(p.gymDays)?p.gymDays+' días/semana':'',p.gymPlace].filter(Boolean).join(' · '):p.gym]].filter(x=>x[1]);
  const as=attStats(id,S.sessions.filter(s=>inLastDays(s.date,30)));
- const gl=S.gymlogs.filter(g=>g.player===id).sort(byDateDesc).slice(0,6);
+ const gl=gymAll().filter(g=>g.player===id).sort(byDateDesc).slice(0,6);
  const gr=S.routines.filter(r=>isGym(r)&&Array.isArray(r.assigned)&&r.assigned.includes(id));
  $('#mTitle').textContent='Ficha del jugador';
  $('#mBody').innerHTML=`<div class="det-head"><div class="dorsal">${isNum(p.number)?+p.number:'–'}</div><div><div style="font-family:var(--f-display);font-size:28px;font-weight:700;text-transform:uppercase;line-height:1.05">${esc(p.name)}</div><span class="pill ${cl}"><span class="dot"></span>${st}</span></div></div>
  <div class="det-sec"><h4>Datos</h4><div class="mini">${facts.map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span>${esc(f[1])}</span></div>`).join('')}</div></div>
  ${p.notes?`<div class="det-sec"><h4>Observaciones</h4><div style="white-space:pre-wrap">${esc(p.notes)}</div></div>`:''}
  <div class="det-sec"><h4>Asistencia últimos 30 días</h4>${as.n?`<div class="att-sum">${ATT.filter(x=>as[x[0]]).map(x=>`<span class="pill ${x[2]}">${x[1]}: ${as[x[0]]}</span>`).join('')}</div>`:'<div style="color:var(--muted)">Sin registros de asistencia.</div>'}</div>
+ <div class="det-sec"><h4>Bienestar y RPE (lo carga el jugador)</h4>${(()=>{const wl=S.checkins.filter(c=>c.player===id).sort(byDateDesc).slice(0,6);return wl.length?`<div class="mini">${wl.map(c=>c.kind==='well'?`<div><span>${fdy(c.date)} · Bienestar${c.painZone?' · dolor: '+esc(c.painZone):''}</span><span class="num">${WELL.map(w=>w[1][0]+(c[w[0]]??'–')).join(' ')} · ${wellTotal(c)}/20</span></div>`:`<div><span>${fdy(c.date)} · ${esc(c.activity||'')}</span><span class="num">RPE ${esc(c.rpe)}${isNum(c.minutes)?' · '+c.minutes+' min · '+Math.round(c.rpe*c.minutes)+' UA':''}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Todavía no cargó nada. Mandale su link.</div>'})()}</div>
  <div class="det-sec"><h4>Gimnasio</h4>${gr.length?`<div style="margin-bottom:8px;font-size:14px">Rutinas asignadas: ${gr.map(r=>`<button class="linkbtn" type="button" data-act="rsheet" data-id="${r.id}">${esc(r.name)}</button>`).join(' · ')}</div>`:''}${gl.length?`<div class="mini">${gl.map(g=>{const r=S.routines.find(x=>x.id===g.routine);return `<div><span>${fdy(g.date)} · ${esc(r?r.name:(g.done||'Gimnasio').split('\n')[0])}</span><span class="num" style="color:var(--muted)">${[isNum(g.duration)?g.duration+' min':'',isNum(g.rpe)?'RPE '+g.rpe:''].filter(Boolean).join(' · ')}</span></div>`}).join('')}</div>`:'<div style="color:var(--muted)">Sin registros de gimnasio.</div>'}</div>
  <div class="det-sec"><h4>Tests (${tests.length})</h4>${tests.length?`<div class="mini">${tests.map(t=>`<div><span>${esc(t.test)} · <span class="num" style="color:var(--muted)">${fdy(t.date)}</span></span><span class="num">${esc(t.value)} ${esc(t.unit||'')}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin mediciones.</div>'}</div>
  <div class="det-sec"><h4>Lesiones (${inj.length})</h4>${inj.length?`<div class="mini">${inj.map(i=>`<div><span>${esc(i.zone||'')} ${i.kind?'· '+esc(i.kind):''} · <span class="num" style="color:var(--muted)">${fdy(i.date)}</span></span><span class="pill ${i.status==='Activa'?'warn':i.status==='Alta'?'ok':'amber'}">${esc(i.status||'')}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin lesiones registradas.</div>'}</div>
- <div class="formacts"><button class="btn" type="button" data-act="add" data-col="tests" data-pre="${id}">+ Test</button><button class="btn" type="button" data-act="add" data-col="injuries" data-pre="${id}">+ Lesión</button><button class="btn" type="button" data-act="add" data-col="gymlogs" data-pre="${id}">+ Gimnasio</button><button class="btn primary" type="button" data-act="edit" data-col="players" data-id="${id}">Editar ficha</button></div>`;
+ <div class="formacts"><button class="btn" type="button" data-act="add" data-col="tests" data-pre="${id}">+ Test</button><button class="btn" type="button" data-act="add" data-col="injuries" data-pre="${id}">+ Lesión</button><button class="btn" type="button" data-act="add" data-col="gymlogs" data-pre="${id}">+ Gimnasio</button><button class="btn" type="button" data-act="plink" data-id="${id}">Link del jugador</button><button class="btn primary" type="button" data-act="edit" data-col="players" data-id="${id}">Editar ficha</button></div>`;
  showModal();
 }
 
@@ -537,6 +550,7 @@ function submitForm(e){
   if(col==='routines'&&old.shareId)setDoc(doc(db,'public',old.shareId),publicRoutine(body)).catch(()=>{})}
  else p=setDoc(doc(collection(db,col)),{...vals,...fixed,by:me.uid,at:now});
  p.catch(err=>toast(err&&err.code==='permission-denied'&&NEW_COLS.includes(col)?'Falta actualizar las reglas de Firebase para guardar esto.':errMsg(err)));
+ if(key==='gymroutines'){const old=id?S[col].find(x=>x.id===id):null;const ids=new Set([...(vals.assigned||[]),...((old&&old.assigned)||[])]);setTimeout(()=>ids.forEach(pid=>{const pp=pl(pid);if(pp&&pp.linkId)syncPlink(pp)}),600)}
  closeModal();toast(navigator.onLine?(id?'Cambios guardados':'Guardado'):'Guardado en el teléfono. Se sincroniza cuando vuelva la señal.');
 }
 function showModal(){$('#modal').hidden=false;document.body.style.overflow='hidden'}
@@ -545,6 +559,7 @@ function del(btn){
  if(!btn.classList.contains('armed')){btn.classList.add('armed');btn.textContent='¿Confirmar?';setTimeout(()=>{btn.classList.remove('armed');btn.textContent='Borrar'},4000);return}
  const {col,id}=btn.dataset;const old=S[col]&&S[col].find(x=>x.id===id);
  if(col==='routines'&&old&&old.shareId)deleteDoc(doc(db,'public',old.shareId)).catch(()=>{});
+ if(col==='players'&&old&&old.linkId)deleteDoc(doc(db,'plinks',old.linkId)).catch(()=>{});
  deleteDoc(doc(db,col,id)).catch(err=>toast(errMsg(err)));toast('Borrado');closeDoc();
 }
 
@@ -595,7 +610,7 @@ function openAtt(sid){
  <div class="att-list">${sortedPlayers().map(p=>{let v=m[p.id]||'';if(!v&&!hasAtt(s)&&availability(p.id)[0]!=='Disponible')v='L';
   return `<div class="att-row"><span class="n">${isNum(p.number)?+p.number:''}</span><label for="att_${p.id}" style="min-width:0">${esc(p.name)}${availability(p.id)[0]!=='Disponible'?` <span class="pill ${availability(p.id)[1]}" style="font-size:11px">${availability(p.id)[0]}</span>`:''}</label><select id="att_${p.id}" data-att="${p.id}" class="s-${v}"><option value="">Sin cargar</option>${ATT.map(a=>`<option value="${a[0]}" ${a[0]===v?'selected':''}>${a[1]}</option>`).join('')}</select></div>`}).join('')}</div>
  <div id="attCount" style="font-size:13px;color:var(--muted)"></div></div>
- <div class="fld"><label for="att_rpe">RPE promedio del grupo (1–10)</label><input id="att_rpe" type="number" inputmode="decimal" min="1" max="10" step="0.5" value="${esc(s.rpe??'')}"><span class="hint">Carga = RPE × ${sessDuration(s)||'minutos'} min.</span></div>
+ <div class="fld"><label for="att_rpe">RPE promedio del grupo (1–10)</label><input id="att_rpe" type="number" inputmode="decimal" min="1" max="10" step="0.5" value="${esc(s.rpe??'')}"><span class="hint">Carga = RPE × ${sessDuration(s)||'minutos'} min.${(()=>{const pr=rpesOf(s.date).filter(c=>c.activity==='Equipo'&&isNum(c.rpe));if(!pr.length)return'';const av=Math.round(pr.reduce((a,c)=>a+ +c.rpe,0)/pr.length*2)/2;return ` Promedio que cargaron los jugadores: <b>${av}</b> (${pr.length} respuesta${pr.length>1?'s':''}). <button type="button" class="linkbtn" data-act="userpe" data-v="${av}">Usar</button>`})()}</span></div>
  <div class="fld full"><label for="att_notes">Observaciones de la sesión</label><textarea id="att_notes">${esc(s.notes||'')}</textarea></div>
  <div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">Guardar asistencia</button></div></form>`;
  showModal();attCount();
@@ -612,7 +627,7 @@ function saveAtt(e){
 /* ---------- gimnasio ---------- */
 function vGym(){
  const h=`<div class="bar"><div><h2>Gimnasio</h2><p>Rutinas para enviar a los jugadores y registro de lo que hace cada uno.</p></div><div class="tools"><button class="btn" type="button" data-act="add" data-col="gymlogs">+ Registro</button>${addBtn('gymroutines','Rutina de gimnasio')}</div></div>`;
- const doers=sortedPlayers().filter(p=>p.gym==='Sí');const wk=S.gymlogs.filter(g=>inLastDays(g.date,7));
+ const doers=sortedPlayers().filter(p=>p.gym==='Sí');const wk=gymAll().filter(g=>inLastDays(g.date,7));
  let out=h+`<div class="stats"><div class="stat"><div class="k">Hacen gimnasio</div><div class="v">${doers.length}</div><div class="s">de ${S.players.length} jugadores</div></div><div class="stat"><div class="k">Registros 7 días</div><div class="v">${wk.length}</div><div class="s">${new Set(wk.map(g=>g.player)).size} jugador${new Set(wk.map(g=>g.player)).size===1?'':'es'}</div></div><div class="stat"><div class="k">Rutinas</div><div class="v">${S.routines.filter(isGym).length}</div><div class="s">de gimnasio</div></div><div class="stat"><div class="k">Minutos 7 días</div><div class="v">${wk.reduce((a,g)=>a+(isNum(g.duration)?+g.duration:0),0)}</div><div class="s">sumando todos</div></div></div>`;
  const rs=S.routines.filter(isGym).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
  out+=rs.length?`<div class="grid-cards">${rs.map(r=>{const ex=(r.exercises||[]).filter(x=>x&&x.name);const asg=(r.assigned||[]).filter(pl);
@@ -623,10 +638,10 @@ function vGym(){
   <div class="tools"><button class="btn sm primary" type="button" data-act="share" data-id="${r.id}">Enviar</button><button class="btn sm" type="button" data-act="rsheet" data-id="${r.id}">Ver / PDF</button></div>
   <div class="foot"><span>${esc(pname(r.editBy||r.by))}</span>${rowActs('gymroutines',r.id)}</div></article>`}).join('')}</div>`
   :`<div class="empty"><strong>Sin rutinas de gimnasio</strong><p>Armá la rutina con ejercicios, series, repeticiones y cargas. Después la mandás por WhatsApp: al jugador le llega un link para verla en el teléfono.</p>${addBtn('gymroutines','Rutina de gimnasio')}</div>`;
- if(doers.length)out+=`<div class="panel"><h3>Quiénes hacen gimnasio</h3><div class="body"><div class="mini">${doers.map(p=>{const last=S.gymlogs.filter(g=>g.player===p.id).sort(byDateDesc)[0];return `<div><span><b>${esc(p.name)}</b>${p.gymPlace?' · '+esc(p.gymPlace):''}</span><span style="color:var(--muted);font-size:13px">${isNum(p.gymDays)?p.gymDays+' días/sem · ':''}${last?'último '+fd(last.date):'sin registros'}</span></div>`}).join('')}</div></div></div>`;
- const logs=S.gymlogs.filter(g=>!gymFilter||g.player===gymFilter).sort(byDateDesc);
+ if(doers.length)out+=`<div class="panel"><h3>Quiénes hacen gimnasio</h3><div class="body"><div class="mini">${doers.map(p=>{const last=gymAll().filter(g=>g.player===p.id).sort(byDateDesc)[0];return `<div><span><b>${esc(p.name)}</b>${p.gymPlace?' · '+esc(p.gymPlace):''}</span><span style="color:var(--muted);font-size:13px">${isNum(p.gymDays)?p.gymDays+' días/sem · ':''}${last?'último '+fd(last.date):'sin registros'}</span></div>`}).join('')}</div></div></div>`;
+ const logs=gymAll().filter(g=>!gymFilter||g.player===gymFilter).sort(byDateDesc);
  out+=`<div class="bar"><div><h2 style="font-size:22px">Registro</h2></div><div class="tools"><select class="flt" id="gymFilter" aria-label="Filtrar jugador"><option value="">Todos los jugadores</option>${sortedPlayers().map(p=>`<option value="${p.id}" ${gymFilter===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div></div>`;
- out+=logs.length?`<div class="list">${logs.map(g=>{const r=S.routines.find(x=>x.id===g.routine);return `<div class="row r-std">${dateCell(g.date)}<div class="main"><div class="t">${esc(plName(g.player))}</div><div class="m">${r?`<span>${esc(r.name)}</span>`:''}${g.place?`<span>${esc(g.place)}</span>`:''}${byline(g)}</div></div><div class="side"><div class="figs">${isNum(g.duration)?`<div class="fig"><div class="n">${+g.duration}</div><div class="l">min</div></div>`:''}${isNum(g.rpe)?`<div class="fig"><div class="n">${+g.rpe}</div><div class="l">RPE</div></div>`:''}</div>${rowActs('gymlogs',g.id)}</div>${g.done?`<div class="notes">${esc(g.done)}</div>`:''}</div>`}).join('')}</div>`
+ out+=logs.length?`<div class="list">${logs.map(g=>{const r=S.routines.find(x=>x.id===g.routine);return `<div class="row r-std">${dateCell(g.date)}<div class="main"><div class="t">${esc(plName(g.player))}</div><div class="m">${r?`<span>${esc(r.name)}</span>`:''}${g.place?`<span>${esc(g.place)}</span>`:''}${g.self?'<span>Cargado por el jugador</span>':byline(g)}</div></div><div class="side"><div class="figs">${isNum(g.duration)?`<div class="fig"><div class="n">${+g.duration}</div><div class="l">min</div></div>`:''}${isNum(g.rpe)?`<div class="fig"><div class="n">${+g.rpe}</div><div class="l">RPE</div></div>`:''}</div>${g.self?`<div class="acts"><button class="btn ghost sm danger" type="button" data-act="del" data-col="checkins" data-id="${g.id}">Borrar</button></div>`:rowActs('gymlogs',g.id)}</div>${g.done?`<div class="notes">${esc(g.done)}</div>`:''}</div>`}).join('')}</div>`
   :`<div class="empty"><strong>Sin registros</strong><p>Anotá cada vez que un jugador hace gimnasio: qué rutina, cuánto tiempo, el RPE y qué hizo.</p><button class="btn primary" type="button" data-act="add" data-col="gymlogs">+ Registro</button></div>`;
  return out;
 }
@@ -735,6 +750,98 @@ function bigToggle(){
  BIG.iv=setInterval(()=>{if(!BIG)return;BIG.left--;const el=$('#bigTime');if(el)el.textContent=mmss(BIG.left);if(BIG.left<=0){clearInterval(BIG.iv);BIG.run=false;bigBeep();bigRender()}},1000);
 }
 
+/* ---------- bienestar y RPE de los jugadores ---------- */
+function vWell(){
+ const d=wellDate||today();
+ const h=`<div class="bar"><div><h2>Bienestar y RPE</h2><p>Lo carga cada jugador desde su link personal, sin cuenta. Escala de 1 (mal) a 5 (muy bien).</p></div><div class="tools"><input class="flt" type="date" id="wellDate" value="${d}" max="${today()}" aria-label="Fecha"><button class="btn primary" type="button" data-act="links">Links de los jugadores</button></div></div>`;
+ if(!S.players.length)return h+empty('Sin jugadores','Cargá el plantel para generar el link de cada jugador.','players','Agregar jugador');
+ const ps=sortedPlayers();const rows=ps.map(p=>({p,w:wellOf(p.id,d)}));const ans=rows.filter(r=>r.w);
+ const alerts=ans.filter(r=>WELL.some(w=>+r.w[w[0]]<=2));const rp=rpesOf(d);
+ const avg=ans.length?(ans.reduce((a,r)=>a+wellTotal(r.w),0)/ans.length).toFixed(1):'–';
+ const v=x=>`<td class="r"><span class="wv ${+x<=2?'lo':+x>=4?'hi':''}">${esc(x??'–')}</span></td>`;
+ const delBtn=id=>`<button class="btn ghost sm danger" type="button" data-act="del" data-col="checkins" data-id="${id}">Borrar</button>`;
+ let out=h+`<div class="stats"><div class="stat"><div class="k">Respondieron</div><div class="v">${ans.length}/${ps.length}</div><div class="s">${d===today()?'hoy':fdy(d)}</div></div><div class="stat"><div class="k">Bienestar promedio</div><div class="v">${avg}</div><div class="s">sobre 20</div></div><div class="stat"><div class="k">Alertas</div><div class="v ${alerts.length?'warn':''}">${alerts.length}</div><div class="s">con algún valor en 1 o 2</div></div><div class="stat"><div class="k">RPE cargados</div><div class="v">${rp.length}</div><div class="s">ese día</div></div></div>`;
+ out+=`<div class="tablewrap"><table><thead><tr><th>Jugador</th>${WELL.map(w=>`<th class="r">${w[1]}</th>`).join('')}<th class="r">Total</th><th>Dolor / comentario</th><th></th></tr></thead><tbody>${[...rows].sort((a,b)=>(a.w?wellTotal(a.w):99)-(b.w?wellTotal(b.w):99)).map(({p,w})=>w?`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td>${WELL.map(x=>v(w[x[0]])).join('')}<td class="r num"><b>${wellTotal(w)}</b>/20</td><td style="white-space:normal;min-width:140px">${esc([w.painZone,w.note].filter(Boolean).join(' · '))}</td><td>${delBtn(w.id)}</td></tr>`:`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td><td colspan="${WELL.length+3}" style="color:var(--muted)">Sin responder</td></tr>`).join('')}</tbody></table></div>`;
+ out+=`<div class="bar"><div><h2 style="font-size:22px">Esfuerzo (RPE) del día</h2><p>Carga individual = RPE × minutos.</p></div></div>`;
+ out+=rp.length?`<div class="tablewrap"><table><thead><tr><th>Jugador</th><th>Actividad</th><th class="r">RPE</th><th class="r">Min</th><th class="r">Carga</th><th>Comentario</th><th></th></tr></thead><tbody>${rp.sort((a,b)=>(b.rpe||0)-(a.rpe||0)).map(c=>`<tr><td>${esc(plName(c.player))}</td><td>${esc(c.activity||'')}</td><td class="r"><span class="wv ${+c.rpe>=8?'lo':''}">${esc(c.rpe)}</span></td><td class="r num">${esc(c.minutes??'')}</td><td class="r num">${isNum(c.minutes)?Math.round(c.rpe*c.minutes):''}</td><td style="white-space:normal;min-width:140px">${esc(c.note||'')}</td><td>${delBtn(c.id)}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty"><strong>Sin RPE ese día</strong><p>Después de entrenar, cada jugador carga su esfuerzo del 1 al 10 y los minutos desde su link.</p></div>`;
+ return out;
+}
+function ensureShare(r){
+ let sid=r.shareId;
+ if(!sid){sid=randId(20);r.shareId=sid;const body={...r};delete body.id;setDoc(doc(db,'routines',r.id),body).catch(()=>{})}
+ setDoc(doc(db,'public',sid),publicRoutine(r)).catch(()=>{});return sid;
+}
+function syncPlink(p){
+ let t=p.linkId;
+ if(!t){t=randId(20);p.linkId=t;const body={...p};delete body.id;setDoc(doc(db,'players',p.id),body).catch(()=>{})}
+ const routines=S.routines.filter(r=>isGym(r)&&Array.isArray(r.assigned)&&r.assigned.includes(p.id)).map(r=>({name:r.name||'',sid:ensureShare(r)}));
+ setDoc(doc(db,'plinks',t),{player:p.id,name:p.name||'',club:club.name||'',routines,updatedAt:new Date().toISOString()}).catch(()=>{});
+ return t;
+}
+function openLinks(pid){
+ if(!S.players.length){toast('Primero cargá el plantel.');return}
+ const ps=pid?[pl(pid)].filter(Boolean):sortedPlayers();if(!ps.length)return;
+ const msg=(p,url)=>`Hola ${String(p.name||'').trim().split(/\s+/)[0]}! Este es tu link personal${club.name?' de '+club.name:''}. Antes de entrenar cargá cómo llegaste y después tu esfuerzo (RPE). Guardalo en favoritos.\n${url}`;
+ editing=null;$('#mTitle').textContent=pid?'Link del jugador':'Links de los jugadores';
+ $('#mBody').innerHTML=`<p style="margin:0">Cada jugador tiene su link personal. Desde ahí carga cómo llegó (sueño, cansancio, dolor, estrés), su esfuerzo después de entrenar y lo que hizo en el gimnasio, y ve las rutinas que tiene asignadas. No necesita cuenta y no ve ningún dato del equipo.</p>
+ <div class="list">${ps.map(p=>{const url=playerUrl(syncPlink(p));return `<div class="row r-mail"><div class="main"><div class="t">${esc(p.name)}</div><div class="m"><span style="overflow-wrap:anywhere">${esc(url)}</span></div></div><div class="acts"><a class="btn sm primary" href="https://wa.me/?text=${encodeURIComponent(msg(p,url))}" target="_blank" rel="noopener">WhatsApp</a><button class="btn sm" type="button" data-act="copyurl" data-url="${esc(url)}">Copiar</button>${pid?`<a class="btn ghost sm" href="${esc(url)}" target="_blank" rel="noopener">Ver</a>`:''}</div></div>`}).join('')}</div>
+ <p style="margin:0;font-size:13px;color:var(--muted)">El link es personal: quien lo tenga puede cargar datos a nombre de ese jugador, así que mandáselo solo a él.</p>`;
+ showModal();
+}
+
+/* página del jugador (se abre con su link, sin cuenta) */
+let PL=null;
+async function showPlayer(tok){
+ const crest=`<img class="crest-lg" src="logo.png" alt="Escudo del club">`;
+ gateScreen(`${crest}<h1>Cargando…</h1><p>Abriendo tu página.</p>`);
+ let L;
+ try{const snap=await getDoc(doc(db,'plinks',tok));if(!snap.exists())return gateScreen(`${crest}<h1>Link no disponible</h1><p>Este link ya no existe. Pedile al cuerpo técnico que te mande uno nuevo.</p>`);L=snap.data()}
+ catch(e){return gateScreen(`${crest}<h1>No se pudo abrir</h1><p>${navigator.onLine?'El link todavía no está habilitado. Avisale al cuerpo técnico.':'Revisá la conexión y volvé a abrir el link.'}</p>`)}
+ PL={tok,L};document.title=(L.club?L.club+' · ':'')+L.name;$('#gate').hidden=true;
+ const seg=(name,n,lo,hi)=>`<div class="seg n${n}" role="radiogroup" aria-label="${name}">${Array.from({length:n},(_,i)=>`<label><input type="radio" name="${name}" value="${i+1}" id="${name}_${i+1}"><span>${i+1}</span></label>`).join('')}</div><div class="seg-ends"><span>${lo}</span><span>${hi}</span></div>`;
+ const rts=(L.routines||[]).filter(r=>r&&r.sid);
+ openDoc(`<div class="sh-head"><img src="logo.png" alt="Escudo del club"><div style="min-width:0"><div class="sh-club">${esc(L.club||'Cuerpo técnico')}</div><div class="eyebrow">Mi registro</div></div></div>
+ <h1 class="sh-title">Hola, ${esc(String(L.name||'').trim().split(/\s+/)[0])}</h1>
+ <form class="pcard" id="wellFrm" novalidate><div><div class="eyebrow">Antes de entrenar</div><h3>Cómo llegué hoy</h3></div>
+  ${WELL.map(w=>`<div class="fld"><span class="lb">${w[1]}</span>${seg(w[0],5,w[2],w[3])}</div>`).join('')}
+  <div class="fld"><label for="w_zone">¿Te duele algo? ¿Dónde?</label><input id="w_zone" maxlength="80" placeholder="Opcional. Ej: isquiotibial derecho"></div>
+  <div class="fld"><label for="w_note">Comentario</label><textarea id="w_note" maxlength="400" placeholder="Opcional"></textarea></div>
+  <p class="err" id="wellErr" hidden></p><button class="btn primary block" type="submit">Enviar cómo llegué</button><p class="sent" id="wellOk" hidden></p></form>
+ <form class="pcard" id="rpeFrm" novalidate><div><div class="eyebrow">Después de entrenar</div><h3>Mi esfuerzo</h3></div>
+  <div class="form"><div class="fld"><label for="r_act">¿Qué hiciste?</label><select id="r_act"><option value="Equipo">Entrenamiento con el equipo</option><option value="Gimnasio">Gimnasio</option><option value="Partido">Partido</option><option value="Otro">Otro, por mi cuenta</option></select></div>
+  <div class="fld"><label for="r_date">Fecha</label><input id="r_date" type="date" value="${today()}" max="${today()}"></div></div>
+  <div class="fld"><span class="lb">Esfuerzo (RPE)</span>${seg('rpe',10,'Muy suave','Máximo')}</div>
+  <div class="fld"><label for="r_min">Duración (minutos)</label><input id="r_min" type="number" inputmode="numeric" min="1" max="300" placeholder="Ej: 90"></div>
+  <div class="fld"><label for="r_note">Qué hiciste</label><textarea id="r_note" maxlength="400" placeholder="Opcional. En gimnasio: ejercicios y cargas"></textarea></div>
+  <p class="err" id="rpeErr" hidden></p><button class="btn primary block" type="submit">Enviar mi esfuerzo</button><p class="sent" id="rpeOk" hidden></p></form>
+ ${rts.length?`<div class="pcard"><div><div class="eyebrow">Gimnasio</div><h3>Mis rutinas</h3></div><div class="list">${rts.map(r=>`<a class="row click" style="text-decoration:none;color:inherit" href="#r-${esc(r.sid)}"><span class="t">${esc(r.name)}</span><span style="color:var(--accent);font-weight:600">Ver →</span></a>`).join('')}</div></div>`:''}
+ <p style="margin:0;font-size:13px;color:var(--muted)">Tus respuestas las ve solo el cuerpo técnico. Guardá esta página en favoritos o en la pantalla de inicio.</p>`,
+ `<div class="wrap"><span class="eyebrow">${esc(L.name||'')}</span></div>`);
+}
+async function sendCheckin(kind){
+ if(!PL)return;const pre=kind==='well'?'well':'rpe';const errEl=$('#'+pre+'Err'),okEl=$('#'+pre+'Ok'),btn=$('#'+pre+'Frm button[type=submit]');
+ const pick=n=>{const el=document.querySelector(`input[name="${n}"]:checked`);return el?+el.value:null};
+ const fail=m=>{errEl.textContent=m;errEl.hidden=false;okEl.hidden=true};errEl.hidden=true;
+ const data={token:PL.tok,player:PL.L.player,kind,at:new Date().toISOString()};
+ if(kind==='well'){
+  for(const w of WELL){const v=pick(w[0]);if(!v)return fail(`Elegí un valor en “${w[1]}”.`);data[w[0]]=v}
+  data.date=today();data.painZone=$('#w_zone').value.trim().slice(0,80);data.note=$('#w_note').value.trim().slice(0,400);
+ }else{
+  const r=pick('rpe');if(!r)return fail('Elegí tu esfuerzo del 1 al 10.');
+  const m=Number($('#r_min').value);if(!m||m<1||m>300)return fail('Escribí cuántos minutos duró (de 1 a 300).');
+  const d=$('#r_date').value||today();if(d>today())return fail('La fecha no puede ser futura.');
+  data.rpe=r;data.minutes=Math.round(m);data.date=d;data.activity=$('#r_act').value;data.note=$('#r_note').value.trim().slice(0,400);
+ }
+ if(!navigator.onLine)return fail('Sin conexión. Probá de nuevo cuando tengas señal.');
+ btn.disabled=true;
+ try{
+  await Promise.race([setDoc(doc(collection(db,'checkins')),data),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),15000))]);
+  okEl.textContent='Enviado a las '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false})+' h. ¡Gracias!';okEl.hidden=false;
+  if(kind==='rpe'){document.querySelectorAll('input[name="rpe"]').forEach(x=>x.checked=false);$('#r_min').value='';$('#r_note').value=''}
+ }catch(e){fail('No se pudo enviar. Probá de nuevo en un momento; si sigue fallando, avisale al cuerpo técnico.')}
+ btn.disabled=false;
+}
+
 /* ---------- eventos ---------- */
 document.addEventListener('click',e=>{
  const b=e.target.closest('[data-act]');
@@ -760,6 +867,10 @@ document.addEventListener('click',e=>{
  else if(a==='rowdown'){const card=b.closest('[data-row]');if(card.nextElementSibling){card.parentElement.insertBefore(card.nextElementSibling,card);renumRows(card.parentElement)}}
  else if(a==='attall'){document.querySelectorAll('[data-att]').forEach(x=>{x.value=availability(x.dataset.att)[0]!=='Disponible'?'L':'P';x.className='s-'+x.value});attCount()}
  else if(a==='attclear'){document.querySelectorAll('[data-att]').forEach(x=>{x.value='';x.className='s-'});attCount()}
+ else if(a==='links')openLinks();
+ else if(a==='plink')openLinks(b.dataset.id);
+ else if(a==='copyurl'){const done=()=>toast('Link copiado');navigator.clipboard?navigator.clipboard.writeText(b.dataset.url).then(done).catch(()=>toast('No se pudo copiar. Mantené apretado el link para copiarlo.')):toast('No se pudo copiar.')}
+ else if(a==='userpe'){$('#att_rpe').value=b.dataset.v}
  else if(a==='bexit')closeBig();
  else if(a==='bprev')bigGo(-1);
  else if(a==='bnext')bigGo(1);
@@ -784,6 +895,7 @@ document.addEventListener('change',e=>{
  if(e.target.id==='testFilter'){testFilter=e.target.value;render()}
  if(e.target.id==='injFilter'){injFilter=e.target.value;render()}
  if(e.target.id==='attRange'){attRange=e.target.value;render()}
+ if(e.target.id==='wellDate'){wellDate=e.target.value;render()}
  if(e.target.id==='gymFilter'){gymFilter=e.target.value;render()}
  if(e.target.dataset&&e.target.dataset.att!==undefined){e.target.className='s-'+e.target.value;attCount()}
  const g=e.target.closest('[data-group]');if(g)updCount(g.dataset.group);
@@ -793,6 +905,8 @@ document.addEventListener('submit',e=>{
  if(id==='authFrm')return onAuthForm(e);
  if(id==='frm')return submitForm(e);
  if(id==='attFrm')return saveAtt(e);
+ if(id==='wellFrm'){e.preventDefault();return sendCheckin('well')}
+ if(id==='rpeFrm'){e.preventDefault();return sendCheckin('rpe')}
  if(id==='clubFrm'){e.preventDefault();const name=$('#clubIn').value.trim();if(!name){toast('Escribí el nombre del equipo.');return}
   document.activeElement&&document.activeElement.blur();
   setDoc(doc(db,'config','club'),{name,editBy:me.uid,editAt:new Date().toISOString()}).catch(err=>toast(errMsg(err)));toast('Nombre del equipo actualizado')}
@@ -813,4 +927,5 @@ let tx=null;
 document.addEventListener('touchstart',e=>{if(BIG&&e.touches.length===1)tx=e.touches[0].clientX},{passive:true});
 document.addEventListener('touchend',e=>{if(!BIG||tx==null)return;const dx=e.changedTouches[0].clientX-tx;tx=null;if(e.target.closest('button'))return;if(Math.abs(dx)>70)bigGo(dx<0?1:-1)},{passive:true});
 try{const t=localStorage.getItem('ct_tab');if(t)tab=t}catch(_){}
-if(publicMode)showPublic(pubMatch[1]);
+window.addEventListener('hashchange',()=>{if(/^#[rj]-/.test(location.hash)||publicMode)location.reload()});
+if(pubMatch)showPublic(pubMatch[1]);else if(plMatch)showPlayer(plMatch[1]);
