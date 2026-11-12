@@ -2,10 +2,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, setDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
-import { DAYS, PERIODS, PERIOD_NAME, INFO, OPT, SPRINTS, SPRINT_RULE, GYM, TESTS, TEST_NAMES, DATA, TEMPLATE_KEYS, mdLabel, sessionFor, weekLayout, planYear } from "./guide.js?v=1";
+import { DAYS, PERIODS, PERIOD_NAME, INFO, OPT, SPRINTS, SPRINT_RULE, GYM, TESTS, TEST_NAMES, DATA, TEMPLATE_KEYS, mdLabel, sessionFor, weekLayout, planYear, GYM_STRUCTURE, PLIO_TYPES, PLIO_LEVELS, PLIO_RULES } from "./guide.js?v=2";
+import { LIB, LIB_PATTERNS, LEVELS } from "./library.js?v=1";
 
-const COLS=['players','sessions','tests','injuries','routines','matches','mesos','micros','gymlogs','checkins'];
-const NEW_COLS=['mesos','micros','gymlogs','checkins']; // necesitan las reglas nuevas de Firestore
+const COLS=['players','sessions','tests','injuries','routines','matches','mesos','micros','gymlogs','checkins','exercises'];
+const NEW_COLS=['mesos','micros','gymlogs','checkins','exercises']; // necesitan las reglas nuevas de Firestore
 const S={};COLS.forEach(c=>S[c]=[]);
 let club={name:''}, access=null, members={}, me=null, tab='resumen', testFilter='', injFilter='activas', attRange='30', gymFilter='', unsubs=[], rulesOld=false;
 const pubMatch=location.hash.match(/^#r-([A-Za-z0-9]{12,40})$/);
@@ -277,7 +278,7 @@ const SCHEMA={
   {k:'squad',l:'Convocados',t:'players',full:1},
   {k:'notes',l:'Notas del partido',t:'textarea',full:1,ph:'Goleadores, cambios, observaciones'}]}
 };
-const TABS=[['resumen','Resumen'],['players','Plantel'],['plan','Planificación'],['guide','Guía'],['sessions','Sesiones'],['att','Asistencia'],['well','Bienestar'],['gym','Gimnasio'],['routines','Rutinas'],['tests','Tests'],['injuries','Lesiones'],['matches','Partidos']];
+const TABS=[['resumen','Resumen'],['players','Plantel'],['plan','Planificación'],['guide','Guía'],['sessions','Sesiones'],['att','Asistencia'],['well','Bienestar'],['gym','Gimnasio'],['lib','Ejercicios'],['routines','Rutinas'],['tests','Tests'],['injuries','Lesiones'],['matches','Partidos']];
 const PARTS=['Entrada en calor','Parte principal','Vuelta a la calma'];
 const ROWDEF={
  tasks:{add:'+ Agregar tarea',label:'Tarea',cols:[
@@ -291,6 +292,7 @@ const ROWDEF={
   {c:'video',l:'Video (link de YouTube)',t:'url',w:'full',ph:'https://youtu.be/…'},
   {c:'img',l:'Imagen o gráfico',t:'image',w:'full'}]},
  exercises:{add:'+ Agregar ejercicio',label:'Ejercicio',cols:[
+  {c:'block',l:'Bloque de la sesión',t:'select',w:'full',opts:['',...GYM_STRUCTURE.map(v=>v[0]),'Anti-extensión','Anti-rotación','Anti-flexión lateral','Glúteos y estabilidad de cadera']},
   {c:'name',l:'Ejercicio',t:'text',w:'full',ph:'Ej: Sentadilla búlgara'},
   {c:'sets',l:'Series',t:'text',w:'q',ph:'4'},
   {c:'reps',l:'Reps o tiempo',t:'text',w:'q',ph:'8 c/pierna'},
@@ -316,7 +318,8 @@ function doRender(){
  // No re-dibujar Configuración mientras se escribe en uno de sus campos.
  if(tab==='config'&&document.activeElement&&document.activeElement.closest('#view form'))return;
  const banner=rulesOld&&['plan','gym','well','resumen'].includes(tab)?`<div class="banner">Falta actualizar las reglas de Firebase para usar Planificación, Gimnasio, Bienestar y los links de los jugadores. Pedile al administrador que las actualice.</div>`:'';
- $('#view').innerHTML=banner+({resumen:vResumen,players:vPlayers,plan:vPlan,guide:vGuide,sessions:vSessions,att:vAtt,well:vWell,gym:vGym,tests:vTests,injuries:vInjuries,routines:vRoutines,matches:vMatches,config:vConfig}[tab])();
+ $('#view').innerHTML=banner+({resumen:vResumen,players:vPlayers,plan:vPlan,guide:vGuide,sessions:vSessions,att:vAtt,well:vWell,gym:vGym,lib:vLib,tests:vTests,injuries:vInjuries,routines:vRoutines,matches:vMatches,config:vConfig}[tab])();
+ hydrateMedia($('#view'));
 }
 const addBtn=(key,label,extra='')=>`<button class="btn primary" type="button" data-act="add" data-col="${key}" ${extra}>+ ${label}</button>`;
 const colOf=key=>(SCHEMA[key]&&SCHEMA[key].col)||key;
@@ -495,7 +498,7 @@ function fieldHTML(f,v){
  else if(f.t==='player')inp=`<select id="${id}" name="${f.k}" ${req}><option value="">Elegí un jugador</option>${sortedPlayers().map(p=>`<option value="${p.id}" ${p.id===v?'selected':''}>${isNum(p.number)?+p.number+' · ':''}${esc(p.name)}</option>`).join('')}</select>`;
  else if(f.t==='routine')inp=`<select id="${id}" name="${f.k}"><option value="">Ninguna</option>${S.routines.filter(r=>f.kind==='Gimnasio'?isGym(r):!isGym(r)).map(r=>`<option value="${r.id}" ${r.id===v?'selected':''}>${esc(r.name)}</option>`).join('')}</select>`;
  else if(f.t==='rows'){const def=ROWDEF[f.k];const rows=Array.isArray(v)&&v.length?v:[{}];
-  return `<div class="fld full"><span class="lb">${f.l}</span><div class="rows" data-rows="${f.k}">${rows.map((r,i)=>rowCard(f.k,r,i)).join('')}</div><div><button type="button" class="btn sm" data-act="rowadd" data-k="${f.k}">${def.add}</button></div></div>`;}
+  return `<div class="fld full"><span class="lb">${f.l}</span><div class="rows" data-rows="${f.k}">${rows.map((r,i)=>rowCard(f.k,r,i)).join('')}</div><div><button type="button" class="btn sm" data-act="rowadd" data-k="${f.k}">${def.add}</button></div>${f.k==='exercises'?libPickHTML():''}</div>`;}
  else if(f.t==='players'){const sel=new Set(Array.isArray(v)?v:[]);const ps=sortedPlayers();
   if(!ps.length)return `<div class="fld full"><span class="lb">${f.l}</span><div class="hint">Primero cargá jugadores en Plantel.</div></div>`;
   return `<div class="fld full"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="lb">${f.l} · <span id="cnt_${f.k}">${sel.size}</span>/${ps.length}</span><span style="display:flex;gap:4px"><button type="button" class="btn ghost sm" data-act="chk" data-k="${f.k}" data-mode="avail">Disponibles</button><button type="button" class="btn ghost sm" data-act="chk" data-k="${f.k}" data-mode="all">Todos</button><button type="button" class="btn ghost sm" data-act="chk" data-k="${f.k}" data-mode="none">Ninguno</button></span></div>
@@ -524,13 +527,14 @@ async function uploadRowImage(inp){
  }catch(e){msg.textContent='No se pudo usar esa imagen. Probá con otra.'}
  inp.value='';
 }
+const imgField=(id,v,c)=>{const ok=okMedia(v);return `<div class="imgfld"><input type="hidden" data-c="${c}" value="${ok?esc(v):''}"><img ${ok?`data-media="${esc(v)}"`:''} alt="" hidden><label class="btn sm filebtn" for="${id}">Elegir imagen</label><input type="file" id="${id}" accept="image/*" data-imgup><button type="button" class="btn ghost sm danger" data-act="imgdel" ${ok?'':'hidden'}>Quitar</button><span class="hint imgmsg"></span></div>`};
 function rowCard(key,r,i){
  const def=ROWDEF[key];const uid=randId(6);
  return `<div class="rowcard" data-row><div class="rc-head"><b>${def.label} <span class="rc-n">${i+1}</span></b><span class="tools" style="gap:2px"><button type="button" class="btn ghost sm" data-act="rowup" aria-label="Subir">↑</button><button type="button" class="btn ghost sm" data-act="rowdown" aria-label="Bajar">↓</button><button type="button" class="btn ghost sm danger" data-act="rowdel">Quitar</button></span></div>
  <div class="rc-grid">${def.cols.map(c=>{const id=`r_${key}_${uid}_${c.c}`;const v=r[c.c]??'';const w=c.w==='full'?' full':c.w==='q'?' q':'';
-  let inp;if(c.t==='select')inp=`<select id="${id}" data-c="${c.c}">${c.opts.map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  let inp;if(c.t==='select')inp=`<select id="${id}" data-c="${c.c}">${c.opts.map(o=>`<option value="${esc(o)}" ${o===v?'selected':''}>${esc(o||'Sin bloque')}</option>`).join('')}</select>`;
   else if(c.t==='textarea')inp=`<textarea id="${id}" data-c="${c.c}" rows="3">${esc(v)}</textarea>`;
-  else if(c.t==='image'){const ok=okMedia(v);inp=`<div class="imgfld"><input type="hidden" data-c="${c.c}" value="${ok?esc(v):''}"><img ${ok?`data-media="${esc(v)}"`:''} alt="" hidden><label class="btn sm filebtn" for="${id}">Elegir imagen</label><input type="file" id="${id}" accept="image/*" data-imgup><button type="button" class="btn ghost sm danger" data-act="imgdel" ${ok?'':'hidden'}>Quitar</button><span class="hint imgmsg"></span></div>`}
+  else if(c.t==='image')inp=imgField(id,v,c.c);
   else if(c.t==='url')inp=`<input id="${id}" data-c="${c.c}" type="url" inputmode="url" autocapitalize="off" value="${esc(v)}" placeholder="${esc(c.ph||'')}">`;
   else inp=`<input id="${id}" data-c="${c.c}" type="${c.t==='number'?'number':'text'}" ${c.t==='number'?'inputmode="numeric" min="0"':''} value="${esc(v)}" placeholder="${esc(c.ph||'')}">`;
   return `<div class="fld${w}"><label for="${id}">${c.l}</label>${inp}</div>`}).join('')}</div></div>`;
@@ -553,7 +557,7 @@ function openForm(key,id,o={}){
   if(o.tpl){Object.assign(defs,o.tpl);defs.time=gset().time}
   if(src){Object.assign(defs,src);['date','att','attendance','rpe','shareId','id','by','at','editBy','editAt'].forEach(k=>delete defs[k]);defs.date=o.date||today()}
  }
- $('#mTitle').textContent=(id?'Editar ':o.copy?'Duplicar ':'Nuevo ')+sc.one;
+ $('#mTitle').textContent=(id?'Editar ':o.copy?'Duplicar ':/^(sesión|medición|lesión|rutina)/.test(sc.one)?'Nueva ':'Nuevo ')+sc.one;
  $('#mBody').innerHTML=`<form class="form" id="frm" novalidate>${sc.fields.map(f=>{let v=d?d[f.k]:(f.k in defs?defs[f.k]:(f.def==='today'?today():''));return fieldHTML(f,v??'')}).join('')}
  <div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">${id?'Guardar cambios':'Guardar'}</button></div></form>`;
  hydrateMedia($('#mBody'));showModal();
@@ -589,7 +593,7 @@ function del(btn){
  const {col,id}=btn.dataset;const old=S[col]&&S[col].find(x=>x.id===id);
  if(col==='routines'&&old&&old.shareId)deleteDoc(doc(db,'public',old.shareId)).catch(()=>{});
  if(col==='players'&&old&&old.linkId)deleteDoc(doc(db,'plinks',old.linkId)).catch(()=>{});
- deleteDoc(doc(db,col,id)).catch(err=>toast(errMsg(err)));toast('Borrado');closeDoc();
+ deleteDoc(doc(db,col,id)).catch(err=>toast(errMsg(err)));toast('Borrado');closeDoc();if(col==='exercises')closeModal();
 }
 
 /* ---------- planificación ---------- */
@@ -615,11 +619,13 @@ function vPlan(){
 }
 
 /* ---------- guía de planificación ---------- */
-const GT=[['year','Año completo'],['week','Microciclo'],['sess','Sesiones guía'],['tasks','Trabajos por día'],['gym','Gimnasio'],['sprint','Sprint'],['tests','Evaluaciones'],['data','Datos a registrar']];
-const gset=()=>({matchDay:0,match2:-1,trainDays:[1,2,3,4,5],time:'19:00',period:'C',...(club.guide||{})});
+const GT=[['year','Año completo'],['week','Microciclo'],['sess','Sesiones guía'],['tasks','Trabajos por día'],['gym','Gimnasio'],['sprint','Sprint'],['plio','Pliometría'],['tests','Evaluaciones'],['data','Datos a registrar']];
+const gset=()=>({matchDay:0,match2:-1,trainDays:[1,2,3,4,5],time:'19:00',period:'C',model:'A',...(club.guide||{})});
 function saveGuide(patch){club={...club,guide:{...gset(),...patch}};setDoc(doc(db,'config','club'),{...club}).catch(()=>{});render()}
 const WD=[1,2,3,4,5,6,0];
 const dayOpts=(v,none)=>(none?`<option value="-1" ${v<0?'selected':''}>${none}</option>`:'')+WD.map(d=>`<option value="${d}" ${v===d?'selected':''}>${DAYS[d]}</option>`).join('');
+const MODELS={A:'Modelo A · recuperación en MD+1',B:'Modelo B · MD+1 libre (del curso)'};
+const modelOpts=v=>Object.keys(MODELS).map(k=>`<option value="${k}" ${v===k?'selected':''}>${MODELS[k]}</option>`).join('');
 const perOpts=v=>['PG','PE','C','T'].map(p=>`<option value="${p}" ${v===p?'selected':''}>${PERIOD_NAME[p]}</option>`).join('');
 const dayChecks=(sel,attr)=>`<div class="g-days">${WD.map(d=>`<label><input type="checkbox" ${attr} value="${d}" id="${attr}_${d}" ${sel.includes(d)?'checked':''}><span>${DAYS[d].slice(0,3)}</span></label>`).join('')}</div>`;
 const mdPill=e=>`<span class="pill ${e.code==='MD'?'warn':e.train?'acc':''}">${esc(mdLabel(e.code||'Libre'))}</span>`;
@@ -627,7 +633,7 @@ const gPeriodCtl=()=>`<div class="fld"><label for="gPeriod">Período</label><sel
 function vGuide(){
  return `<div class="bar"><div><h2>Guía</h2><p>Estructura de referencia para planificar el año. Los valores son puntos de partida: ajustalos a tu plantel y a tu criterio.</p></div><div class="tools"><button class="btn primary" type="button" data-act="gyear">Armar la temporada</button></div></div>
  <div class="subnav">${GT.map(([k,l])=>`<button class="sub ${guideTab===k?'on':''}" type="button" data-act="gtab" data-k="${k}">${l}</button>`).join('')}</div>`
- +({year:gYear,week:gWeek,sess:gSess,tasks:gTasks,gym:gGym,sprint:gSprint,tests:gTests,data:gData}[guideTab]||gYear)();
+ +({year:gYear,week:gWeek,sess:gSess,tasks:gTasks,gym:gGym,sprint:gSprint,plio:gPlio,tests:gTests,data:gData}[guideTab]||gYear)();
 }
 function gYear(){
  return `<div class="panel"><h3>Cómo usar la guía</h3><div class="body"><ol class="g-steps"><li><b>Armar la temporada:</b> ponés las fechas y el día de partido, y se crean los mesociclos y un microciclo por semana.</li><li><b>Sesiones guía:</b> en Planificación, cada microciclo tiene ese botón. Elegís si esa semana hay uno o dos partidos y qué día, y se arman las sesiones con objetivos, materiales y tareas.</li><li><b>Ajustar:</b> todo lo que se crea se puede editar, duplicar o borrar como cualquier sesión.</li></ol></div></div>
@@ -635,23 +641,23 @@ function gYear(){
 }
 function gWeek(){
  const g=gset(),per=g.period,hasM=per==='PE'||per==='C';
- const ctl=`<div class="g-ctl">${gPeriodCtl()}${hasM?`<div class="fld"><label for="gMatch">Día de partido</label><select class="flt" id="gMatch">${dayOpts(g.matchDay)}</select></div>`:''}${per==='C'?`<div class="fld"><label for="gMatch2">Segundo partido en la semana</label><select class="flt" id="gMatch2">${dayOpts(g.match2,'No hay')}</select></div>`:''}<div class="fld"><span class="lb">Días de entrenamiento</span>${dayChecks(g.trainDays,'data-gday')}</div></div>`;
+ const ctl=`<div class="g-ctl">${gPeriodCtl()}${hasM?`<div class="fld"><label for="gModel">Modelo de semana</label><select class="flt" id="gModel">${modelOpts(g.model)}</select></div><div class="fld"><label for="gMatch">Día de partido</label><select class="flt" id="gMatch">${dayOpts(g.matchDay)}</select></div>`:''}${per==='C'?`<div class="fld"><label for="gMatch2">Segundo partido en la semana</label><select class="flt" id="gMatch2">${dayOpts(g.match2,'No hay')}</select></div>`:''}<div class="fld"><span class="lb">Días de entrenamiento</span>${dayChecks(g.trainDays,'data-gday')}</div></div>`;
  if(per==='T')return ctl+`<div class="panel"><h3>Transición</h3><div class="body"><div class="g-kv"><div><span class="k">Semanas 1 y 2</span><span>Descanso activo: sin entrenamientos de club. Otros deportes, caminatas, bicicleta.</span></div><div><span class="k">Desde la semana 3</span><span>Plan individual, 3 días por semana: 2 de gimnasio general y 1–2 de aeróbico suave de 20–30 min. En la última semana, progresiones de carrera.</span></div><div><span class="k">Gimnasio</span><span>Rutina “Guía · Transición (general)”, que podés mandarle a cada jugador desde Gimnasio.</span></div></div></div></div>`;
- const lay=weekLayout({period:per,matchDay:g.matchDay,match2:g.match2,trainDays:g.trainDays,gweek:2});
+ const lay=weekLayout({period:per,matchDay:g.matchDay,match2:g.match2,trainDays:g.trainDays,gweek:2,model:g.model});
  const two=per==='C'&&g.match2>=0&&g.match2!==g.matchDay;
  const rows=lay.map(e=>{
   if(e.code==='MD')return `<tr><td><b>${DAYS[e.wd]}</b></td><td>${mdPill(e)}</td><td colspan="5"><b>${per==='PE'?'Amistoso':'Partido'}</b>. Datos del día: bienestar, convocados, minutos jugados y RPE después del partido.</td></tr>`;
-  if(!e.train)return `<tr><td><b>${DAYS[e.wd]}</b></td><td>${e.code?mdPill(e):''}</td><td colspan="5" style="color:var(--muted)">Sin entrenamiento</td></tr>`;
+  if(!e.train)return `<tr><td><b>${DAYS[e.wd]}</b></td><td>${e.code?mdPill(e):''}</td><td colspan="5" style="color:var(--muted)">${e.rest?'Día libre después del partido':'Sin entrenamiento'}</td></tr>`;
   const i=INFO[e.key];
-  return `<tr><td><b>${DAYS[e.wd]}</b></td><td>${mdPill(e)}</td><td><b>${esc(i.t)}</b>${e.last?' + previa del partido':''}<div class="g-sub">${esc(i.goal)}</div></td><td>${esc(i.field)}${e.last?' Como es el último entrenamiento antes del partido, se suman pelota parada y estrategia.':''}</td><td>${esc(e.key==='MD-4'&&e.gym?'Fuerza de tren inferior antes del campo, porque no hay sesión en MD-5.':i.gym)}</td><td>${esc(i.sprint)}</td><td><b>${esc(i.load)}</b><div class="g-sub">RPE ${esc(i.rpe)}</div></td></tr>`}).join('');
+  return `<tr><td><b>${DAYS[e.wd]}</b></td><td>${mdPill(e)}</td><td><b>${esc(i.t)}</b>${e.last?' + previa del partido':''}<div class="g-sub">${esc(i.goal)}</div></td><td>${esc(i.field)}${e.last?' Como es el último entrenamiento antes del partido, se suman pelota parada y estrategia.':''}</td><td>${esc(e.key==='MD-4'&&e.gym?'Fuerza de tren inferior antes del campo, porque no hay sesión en MD-5.':i.gym)}</td><td>${esc(i.sprint)}</td><td><b>${esc(i.load)}</b><div class="g-sub">RPE ${esc(i.rpe)}</div>${i.gps?`<div class="g-sub">GPS de referencia: ${esc(i.gps)}</div>`:''}</td></tr>`}).join('');
  return ctl+`<div class="tablewrap g-table"><table><thead><tr><th>Día</th><th>${per==='PG'?'Sesión':'MD'}</th><th>Qué se trabaja</th><th>Campo</th><th>Gimnasio</th><th>Sprint</th><th>Carga</th></tr></thead><tbody>${rows}</tbody></table></div>
- <p class="g-note">${per==='PG'?'En la pretemporada general no hay partido: la semana alterna días de carga física con días de pelota. En la semana 1, los dos primeros días son de evaluaciones.':two?'Con dos partidos por semana casi no hay días de carga: se recupera, se activa y se compite. Los que juegan poco necesitan el compensatorio de MD+1 y algo de fuerza para no perder forma.':'MD es el día de partido. MD-4 es cuatro días antes y MD+1 es el día siguiente. Si cambia el día de partido, cambia toda la semana: elegilo arriba y la tabla se reacomoda.'}</p>`;
+ <p class="g-note">${per==='PG'?'En la pretemporada general no hay partido: la semana alterna días de carga física con días de pelota. En la semana 1, los dos primeros días son de evaluaciones.':two?'Con dos partidos por semana casi no hay días de carga: se recupera, se activa y se compite. Los que juegan poco necesitan el compensatorio de MD+1 y algo de fuerza para no perder forma.':'MD es el día de partido. MD-4 es cuatro días antes y MD+1 es el día siguiente. Si cambia el día de partido, cambia toda la semana: elegilo arriba y la tabla se reacomoda.'}${hasM&&g.model==='B'?(two?' Con dos partidos por semana se usa el modelo A, porque no hay lugar para un día libre.':' En el modelo B, el día siguiente al partido es libre y la recuperación con el compensatorio pasa a MD+2. Las referencias de GPS dependen de las zonas de velocidad de cada sistema.'):''}</p>`;
 }
 const gPer=()=>{const p=gset().period;return p==='T'?'C':p};
 function taskTable(tasks){return `<div class="tablewrap sh-table"><table><thead><tr><th>Parte</th><th>Tarea</th><th>Organización</th><th>Espacio</th><th class="r">Min</th></tr></thead><tbody>${tasks.map(t=>`<tr><td>${esc(t.part)}</td><td><div class="t-name">${esc(t.name)}</div>${t.desc?`<div class="t-desc">${esc(t.desc)}</div>`:''}</td><td>${esc(t.org||'')}</td><td>${esc(t.space||'')}</td><td class="r num">${esc(t.time)}</td></tr>`).join('')}</tbody></table></div>`}
 function gSess(){
- const per=gPer();const keys=TEMPLATE_KEYS.filter(k=>per==='PG'?!k.startsWith('MD'):k.startsWith('MD'));
- return `<div class="g-ctl">${gPeriodCtl()}<p class="g-note" style="flex:1;min-width:200px">Sesiones modelo para cada día. Abrí una para ver las tareas, o creá una sesión nueva a partir de ella.</p></div>
+ const per=gPer();const mB=gset().model==='B';const keys=TEMPLATE_KEYS.filter(k=>per==='PG'?/^(PG|EV)/.test(k):mB?/^B/.test(k):k.startsWith('MD'));
+ return `<div class="g-ctl">${gPeriodCtl()}${per==='PG'?'':`<div class="fld"><label for="gModel">Modelo de semana</label><select class="flt" id="gModel">${modelOpts(gset().model)}</select></div>`}<p class="g-note" style="flex:1;min-width:200px">Sesiones modelo para cada día. Abrí una para ver las tareas, o creá una sesión nueva a partir de ella.</p></div>
  <div class="panel">${keys.map(k=>{const s=sessionFor({key:k},per);return `<details class="g-det"><summary><span class="pill acc">${esc(mdLabel(k))}</span><span>${esc(INFO[k].t)}</span><span class="num g-sub" style="margin-left:auto">${s.duration} min · RPE ${esc(INFO[k].rpe)}</span></summary><div class="in"><div class="g-kv"><div><span class="k">Objetivos</span><span>${esc(INFO[k].obj.join(' · '))}</span></div><div><span class="k">Materiales</span><span>${esc(INFO[k].mat.join(', '))}</span></div><div><span class="k">Espacio</span><span>${esc(INFO[k].space)}</span></div></div>${taskTable(s.tasks)}<div><button class="btn primary" type="button" data-act="gtpl" data-k="${k}">Crear una sesión con esta guía</button></div></div></details>`}).join('')}</div>`;
 }
 function gTasks(){
@@ -659,14 +665,22 @@ function gTasks(){
  +['MD+1','MD-5','MD-4','MD-3','MD-2','MD-1'].map(k=>`<div class="panel"><h3>${k} · ${esc(INFO[k].t)} <small>${esc(INFO[k].load)}</small></h3><div class="tablewrap g-table" style="border:0;border-radius:0 0 12px 12px"><table><thead><tr><th>Trabajo</th><th>Jugadores</th><th>Espacio</th><th>Tiempo</th><th>Pausa</th><th>Claves</th></tr></thead><tbody>${OPT[k].map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${esc(p.players)}</td><td class="num">${esc(p.space)}</td><td class="num">${esc(p.work)}</td><td class="num">${esc(p.rest)}</td><td>${esc(p.notes)}</td></tr>`).join('')}</tbody></table></div></div>`).join('');
 }
 function gGym(){
- return `<p class="g-note">El gimnasio acompaña cada etapa. Cada rutina se puede agregar a tus rutinas de Gimnasio para editarla, asignarla y mandarla a los jugadores.</p>`
- +GYM.map((G,pi)=>`<div class="panel"><div class="meso-head"><h4>${esc(PERIOD_NAME[G.period])}</h4><div class="g-kv"><div><span class="k">Frecuencia</span><span>${esc(G.freq)}</span></div><div><span class="k">Cuándo</span><span>${esc(G.when)}</span></div><div><span class="k">Objetivo</span><span>${esc(G.goal)}</span></div></div></div>
- ${G.routines.map((r,ri)=>{const has=S.routines.some(q=>q.name===r.name);return `<details class="g-det"><summary><span>${esc(r.name.replace('Guía · ',''))}</span><span class="num g-sub" style="margin-left:auto">${r.duration} min · ${r.exercises.length} ejercicios</span></summary><div class="in"><div style="font-size:14px">${esc(r.indications)}</div><div class="tablewrap sh-table"><table><thead><tr><th>Ejercicio</th><th class="r">Series</th><th class="r">Reps</th><th>Carga</th><th>Pausa</th></tr></thead><tbody>${r.exercises.map(v=>`<tr><td><div class="t-name">${esc(v.name)}</div>${v.notes?`<div class="t-mat">${esc(v.notes)}</div>`:''}</td><td class="r num">${esc(v.sets)}</td><td class="r num">${esc(v.reps)}</td><td>${esc(v.load)}</td><td>${esc(v.rest)}</td></tr>`).join('')}</tbody></table></div><div>${has?`<span class="pill ok">Ya está en tus rutinas de Gimnasio</span>`:`<button class="btn primary" type="button" data-act="ggym" data-p="${pi}" data-i="${ri}">Agregar a mis rutinas de Gimnasio</button>`}</div></div></details>`}).join('')}</div>`).join('');
+ return `<p class="g-note">El gimnasio acompaña cada etapa. Cada rutina se puede agregar a tus rutinas de Gimnasio para editarla, asignarla y mandarla a los jugadores.</p>
+ <div class="panel"><h3>Cómo se arma una sesión de fuerza</h3><div class="body"><p class="g-note" style="margin-bottom:10px">Se piensa en movimientos, no en músculos: rodilla dominante, cadera dominante, empuje, tracción y core. Los ejercicios a una pierna o a un brazo dan equilibrio y simetría; los de dos, la base de fuerza.</p><div class="g-kv">${GYM_STRUCTURE.map((v,i)=>`<div><span class="k">${i+1}. ${esc(v[0])}</span><span>${esc(v[1])}</span></div>`).join('')}</div></div></div>`
+ +GYM.map((G,pi)=>`<div class="panel"><div class="meso-head"><h4>${esc(G.title||PERIOD_NAME[G.period])}</h4><div class="g-kv"><div><span class="k">Frecuencia</span><span>${esc(G.freq)}</span></div><div><span class="k">Cuándo</span><span>${esc(G.when)}</span></div><div><span class="k">Objetivo</span><span>${esc(G.goal)}</span></div></div></div>
+ ${G.routines.map((r,ri)=>{const has=S.routines.some(q=>q.name===r.name);return `<details class="g-det"><summary><span>${esc(r.name.replace('Guía · ',''))}</span><span class="num g-sub" style="margin-left:auto">${r.duration} min · ${r.exercises.length} ejercicios</span></summary><div class="in"><div style="font-size:14px">${esc(r.indications)}</div><div class="tablewrap sh-table"><table><thead><tr><th>Ejercicio</th><th class="r">Series</th><th class="r">Reps</th><th>Carga</th><th>Pausa</th></tr></thead><tbody>${r.exercises.map((v,i)=>`${v.block&&(i===0||r.exercises[i-1].block!==v.block)?`<tr class="sh-part"><td colspan="5">${esc(v.block)}</td></tr>`:''}<tr><td><div class="t-name">${esc(v.name)}</div>${v.notes?`<div class="t-mat">${esc(v.notes)}</div>`:''}</td><td class="r num">${esc(v.sets)}</td><td class="r num">${esc(v.reps)}</td><td>${esc(v.load)}</td><td>${esc(v.rest)}</td></tr>`).join('')}</tbody></table></div><div>${has?`<span class="pill ok">Ya está en tus rutinas de Gimnasio</span>`:`<button class="btn primary" type="button" data-act="ggym" data-p="${pi}" data-i="${ri}">Agregar a mis rutinas de Gimnasio</button>`}</div></div></details>`}).join('')}</div>`).join('');
 }
 function gSprint(){
  return `<div class="banner" style="background:var(--accent-soft);color:var(--ink)">${esc(SPRINT_RULE)}</div>
  <div class="tablewrap g-table"><table><thead><tr><th>Sesión</th><th>Cuándo</th><th>Trabajo</th><th>Pausa</th><th>Total</th><th>Claves</th></tr></thead><tbody>${SPRINTS.map(s=>`<tr><td><b>${esc(s.name)}</b></td><td>${esc(s.when)}</td><td>${esc(s.work)}</td><td class="num">${esc(s.rest)}</td><td class="num">${esc(s.total)}</td><td>${esc(s.notes)}</td></tr>`).join('')}</tbody></table></div>
  <p class="g-note">Las sesiones guía ya incluyen el bloque de sprint que corresponde a cada día: aceleración en MD-4, velocidad máxima en MD-2 y compensatorio en MD+1.</p>`;
+}
+function gPlio(){
+ return `<p class="g-note">Los saltos enseñan a absorber fuerza y a devolverla rápido. Van del aterrizaje a los saltos con caída, y cada jugador avanza según su base de fuerza y cómo aterriza.</p>
+ <div class="panel"><h3>Tipos de salto</h3><div class="body"><div class="g-kv">${PLIO_TYPES.map(t=>`<div><span class="k">${esc(t[0])}</span><span>${esc(t[1])}</span></div>`).join('')}</div></div></div>
+ <div class="tablewrap g-table"><table><thead><tr><th>Nivel</th><th>Qué se trabaja</th><th>Ejercicios</th><th>Para pasar a este nivel</th><th>Dosis</th></tr></thead><tbody>${PLIO_LEVELS.map(l=>`<tr><td><span class="rk">${l.n}</span></td><td><b>${esc(l.name)}</b></td><td>${esc(l.ex)}</td><td>${esc(l.need)}</td><td class="num">${esc(l.dose)}</td></tr>`).join('')}</tbody></table></div>
+ <div class="panel"><h3>Reglas prácticas</h3><div class="body"><ul class="g-steps" style="list-style:disc">${PLIO_RULES.map(r=>`<li>${esc(r)}</li>`).join('')}</ul></div></div>
+ <p class="g-note">Los ejercicios están en la pestaña Ejercicios, en el patrón Pliometría. Las sesiones guía de MD-4 ya incluyen un bloque corto de saltos.</p>`;
 }
 function gTests(){
  const cal=[['Semana 1 de la pretemporada','Batería completa'],['Última semana de la pretemporada','Saltos, velocidad y resistencia, para comparar'],['Todas las semanas','CMJ y aductores (MD-5 o MD-4)'],['Cada 6–8 semanas','Sprint 10 y 30 m, saltos y composición corporal'],['Mitad de temporada o receso','Fuerza y resistencia'],['Última semana de competencia','Evaluación final']];
@@ -725,7 +739,8 @@ function openGuideMicro(id){
  $('#mBody').innerHTML=`<form class="form" id="gmFrm" novalidate>
  <div class="fld full"><span style="font-size:14px">Semana del ${fd(c.start)} al ${fd(c.end)}. Elegí cómo viene la semana y se arman las sesiones con objetivos, materiales y tareas. Después las podés editar.</span></div>
  <div class="fld"><label for="gmPeriod">Período</label><select id="gmPeriod">${perOpts(per)}</select></div>
- <div class="fld"><label for="gmTime">Hora</label><input id="gmTime" type="time" value="${esc(g.time)}"></div>
+ <div class="fld"><label for="gmModel">Modelo de semana</label><select id="gmModel">${modelOpts(g.model)}</select></div>
+ <div class="fld full"><label for="gmTime">Hora</label><input id="gmTime" type="time" value="${esc(g.time)}"></div>
  <div class="fld"><label for="gmMatch">Día de partido</label><select id="gmMatch">${dayOpts(g.matchDay,'Sin partido esta semana')}</select></div>
  <div class="fld"><label for="gmMatch2">Segundo partido</label><select id="gmMatch2">${dayOpts(per==='C'?g.match2:-1,'No hay')}</select></div>
  <div class="fld full" id="gmList"></div>
@@ -735,11 +750,11 @@ function openGuideMicro(id){
 function gmRender(){
  const c=S.micros.find(v=>v.id===GM.id);const el=$('#gmList');if(!c||!el)return;
  const per=$('#gmPeriod').value,md=+$('#gmMatch').value,m2=+$('#gmMatch2').value;
- $('#gmMatch').disabled=per==='PG'||per==='T';$('#gmMatch2').disabled=per!=='C'||md<0;
+ $('#gmMatch').disabled=per==='PG'||per==='T';$('#gmModel').disabled=per==='PG'||per==='T';$('#gmMatch2').disabled=per!=='C'||md<0;
  GM.rows=[];$('#gmGo').disabled=true;
  if(per==='T'){el.innerHTML=`<p class="g-note">En la transición no hay sesiones de club. Mandale a cada jugador la rutina “Guía · Transición (general)” desde Gimnasio.</p>`;return}
  const eff=md<0?'PG':per;GM.per=per;
- const lay=weekLayout({period:eff,matchDay:md,match2:m2,trainDays:gset().trainDays,gweek:per==='PG'&&c.gperiod==='PG'?c.gweek:2});
+ const lay=weekLayout({period:eff,matchDay:md,match2:m2,trainDays:gset().trainDays,gweek:per==='PG'&&c.gperiod==='PG'?c.gweek:2,model:$('#gmModel').value});
  for(let d=c.start,i=0;d<=c.end&&i<14;d=addDays(d,1),i++){const e=lay.find(v=>v.wd===parse(d).getDay());if(e&&e.key)GM.rows.push({date:d,e,has:S.sessions.some(s=>s.date===d)})}
  if(!GM.rows.length){el.innerHTML=`<p class="g-note">No hay días de entrenamiento en esta semana. Revisá los días de entrenamiento en Guía → Microciclo.</p>`;return}
  $('#gmGo').disabled=false;
@@ -753,7 +768,57 @@ function createGuideSessions(e){
  closeModal();toast(n===1?'Se creó 1 sesión.':`Se crearon ${n} sesiones.`);
 }
 
+/* ---------- biblioteca de ejercicios ---------- */
+let libPat=LIB_PATTERNS[0];
+function libAll(){
+ const ov={};S.exercises.forEach(d=>{ov[d.id]=d});
+ const base=LIB.map(e=>{const o=ov[e.id];return o?{...e,video:safeUrl(o.video),img:okMedia(o.img)?o.img:'',cue:o.cue||e.cue}:{...e,video:'',img:''}});
+ const custom=S.exercises.filter(d=>d.custom&&d.name).map(d=>({id:d.id,custom:true,pattern:d.pattern||LIB_PATTERNS[0],group:d.group||'Propios',name:d.name,level:+d.level||1,cue:d.cue||'',video:safeUrl(d.video),img:okMedia(d.img)?d.img:''}));
+ return [...base,...custom];
+}
+const libGroups=pat=>{const g=[];libAll().filter(e=>e.pattern===pat).forEach(e=>{if(!g.includes(e.group))g.push(e.group)});return g};
+const lvlPill=l=>`<span class="pill ${l===1?'ok':l===2?'acc':'amber'}">${LEVELS[l]||''}</span>`;
+function vLib(){
+ const all=libAll();const list=all.filter(e=>e.pattern===libPat);const withVid=all.filter(e=>e.video).length;
+ let out=`<div class="bar"><div><h2>Ejercicios</h2><p>Biblioteca por patrón de movimiento, de lo más simple a lo más complejo. ${all.length} ejercicios, ${withVid} con video cargado.</p></div><div class="tools"><button class="btn primary" type="button" data-act="libnew">+ Ejercicio propio</button></div></div>
+ <div class="subnav">${LIB_PATTERNS.map(p=>`<button class="sub ${libPat===p?'on':''}" type="button" data-act="lpat" data-k="${esc(p)}">${esc(p)}<span class="num" style="margin-left:6px;opacity:.75">${all.filter(e=>e.pattern===p).length}</span></button>`).join('')}</div>`;
+ libGroups(libPat).forEach(g=>{const rows=list.filter(e=>e.group===g).sort((a,b)=>a.level-b.level);
+  out+=`<div class="panel"><h3>${esc(g)} <small>${rows.length}</small></h3><div class="list" style="border:0;border-radius:0 0 12px 12px">${rows.map(e=>`<div class="row r-lib">${e.img?`<img class="lib-thumb" data-media="${e.img}" alt="" hidden>`:'<span class="lib-thumb ph" aria-hidden="true"></span>'}<div class="main"><div class="t">${esc(e.name)} ${lvlPill(e.level)}${e.custom?' <span class="pill">Propio</span>':''}</div><div class="m"><span>${esc(e.cue)}</span></div></div><div class="acts">${e.video?`<a class="btn ghost sm" href="${esc(e.video)}" target="_blank" rel="noopener">▶ Video</a>`:''}<button class="btn ghost sm" type="button" data-act="libedit" data-id="${esc(e.id)}">${e.video||e.img?'Editar':'Cargar video o imagen'}</button></div></div>`).join('')}</div></div>`});
+ return out+`<p class="g-note">Al armar una rutina de gimnasio podés elegir los ejercicios de esta biblioteca: se copian con su video e imagen.</p>`;
+}
+function openLibEdit(id){
+ const e=id?libAll().find(v=>v.id===id):null;const isNew=!e;const custom=isNew||e.custom;
+ editing={lib:id||null,custom};$('#mTitle').textContent=isNew?'Ejercicio propio':e.name;
+ const pat=e?e.pattern:libPat;
+ $('#mBody').innerHTML=`<form class="form" id="libFrm" novalidate>
+ ${custom?`<div class="fld full"><label for="lb_name">Nombre *</label><input id="lb_name" value="${esc(e?e.name:'')}" required></div>
+ <div class="fld"><label for="lb_pat">Patrón</label><select id="lb_pat">${LIB_PATTERNS.map(p=>`<option ${p===pat?'selected':''}>${esc(p)}</option>`).join('')}</select></div>
+ <div class="fld"><label for="lb_lvl">Nivel</label><select id="lb_lvl">${[1,2,3].map(l=>`<option value="${l}" ${e&&e.level===l?'selected':''}>${LEVELS[l]}</option>`).join('')}</select></div>
+ <div class="fld full"><label for="lb_group">Grupo</label><input id="lb_group" value="${esc(e?e.group:'')}" list="lb_groups" placeholder="Ej: Una pierna"><datalist id="lb_groups">${libGroups(pat).map(g=>`<option value="${esc(g)}">`).join('')}</datalist></div>`
+ :`<div class="fld full"><span style="font-size:14px;color:var(--muted)">${esc(e.pattern)} · ${esc(e.group)} · ${LEVELS[e.level]}</span></div>`}
+ <div class="fld full"><label for="lb_cue">Indicaciones</label><textarea id="lb_cue" rows="3">${esc(e?e.cue:'')}</textarea></div>
+ <div class="fld full"><label for="lb_video">Video (link de YouTube)</label><input id="lb_video" type="url" inputmode="url" autocapitalize="off" value="${esc(e?e.video:'')}" placeholder="https://youtu.be/…"></div>
+ <div class="fld full"><label for="lb_img">Imagen del ejercicio</label>${imgField('lb_img',e?e.img:'','img')}</div>
+ <div class="formacts">${e&&e.custom?`<button type="button" class="btn ghost danger" data-act="del" data-col="exercises" data-id="${esc(e.id)}">Borrar</button>`:''}<button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">Guardar</button></div></form>`;
+ hydrateMedia($('#mBody'));showModal();
+}
+function saveLib(ev){
+ ev.preventDefault();if(!editing)return;const {lib:id,custom}=editing;
+ let video=$('#lb_video').value.trim();if(video&&!/^https?:\/\//i.test(video))video='https://'+video;
+ if(video&&!safeUrl(video)){toast('Ese link de video no es válido.');return}
+ const img=$('#libFrm .imgfld input[type=hidden]').value;
+ const body={cue:$('#lb_cue').value.trim(),video,img:okMedia(img)?img:'',editBy:me.uid,editAt:new Date().toISOString()};
+ if(custom){const name=$('#lb_name').value.trim();if(!name){toast('Escribí el nombre del ejercicio.');return}
+  Object.assign(body,{custom:true,name,pattern:$('#lb_pat').value,level:+$('#lb_lvl').value,group:$('#lb_group').value.trim()||'Propios'});libPat=body.pattern}
+ const ref=id?doc(db,'exercises',id):doc(collection(db,'exercises'));
+ setDoc(ref,body).catch(err=>toast(err&&err.code==='permission-denied'?'Falta actualizar las reglas de Firebase para guardar ejercicios.':errMsg(err)));
+ closeModal();toast('Ejercicio guardado');
+}
+const libPickHTML=()=>`<div class="libpick"><span class="lb" style="flex-basis:100%">Agregar de la biblioteca</span><select id="lp_pat" aria-label="Patrón de movimiento">${LIB_PATTERNS.map(p=>`<option>${esc(p)}</option>`).join('')}</select><select id="lp_ex" aria-label="Ejercicio">${libPickOpts(LIB_PATTERNS[0])}</select><button type="button" class="btn sm" data-act="libadd">Agregar</button></div>`;
+function libPickOpts(pat){const all=libAll().filter(e=>e.pattern===pat);return libGroups(pat).map(g=>`<optgroup label="${esc(g)}">${all.filter(e=>e.group===g).sort((a,b)=>a.level-b.level).map(e=>`<option value="${esc(e.id)}">${esc(e.name)}${e.video?' ▶':''}</option>`).join('')}</optgroup>`).join('')}
+
 /* ---------- asistencia ---------- */
+
 function attSessions(){const t=today();return S.sessions.filter(s=>{if(!hasAtt(s))return false;if(attRange==='30')return inLastDays(s.date,30);if(attRange==='mes')return s.date&&s.date.slice(0,7)===t.slice(0,7);if(attRange==='micro'){const m=microOf(t);return m?inRange(s.date,m):false}return true})}
 function vAtt(){
  const opt=(v,l)=>`<option value="${v}" ${attRange===v?'selected':''}>${l}</option>`;
@@ -814,7 +879,7 @@ function vGym(){
  return out;
 }
 function publicRoutine(r){
- return {type:'routine',club:club.name||'',name:r.name||'',category:r.category||'',duration:r.duration??'',target:r.target||'',indications:r.indications||'',exercises:(r.exercises||[]).filter(x=>x&&x.name).map(x=>({name:x.name||'',sets:x.sets||'',reps:x.reps||'',load:x.load||'',rest:x.rest||'',notes:x.notes||'',video:safeUrl(x.video),img:okMedia(x.img)?x.img:''})),updatedAt:new Date().toISOString()};
+ return {type:'routine',club:club.name||'',name:r.name||'',category:r.category||'',duration:r.duration??'',target:r.target||'',indications:r.indications||'',exercises:(r.exercises||[]).filter(x=>x&&x.name).map(x=>({name:x.name||'',sets:x.sets||'',reps:x.reps||'',load:x.load||'',rest:x.rest||'',notes:x.notes||'',block:x.block||'',video:safeUrl(x.video),img:okMedia(x.img)?x.img:''})),updatedAt:new Date().toISOString()};
 }
 function shareRoutine(id){
  const r=S.routines.find(x=>x.id===id);if(!r)return;
@@ -858,8 +923,8 @@ function routineSheet(r){
  <h1 class="sh-title">${esc(r.name)}</h1>
  ${meta.length?`<div class="sh-meta">${meta.map(m=>`<div><div class="k">${m[0]}</div><div class="v">${esc(m[1])}</div></div>`).join('')}</div>`:''}
  ${r.indications?`<div class="sh-sec"><h3>Indicaciones</h3><div style="white-space:pre-wrap">${esc(r.indications)}</div></div>`:''}
- <div class="sh-sec"><h3>Ejercicios</h3>${ex.length?`<div class="tablewrap sh-table ex-table"><table><thead><tr><th>#</th><th>Ejercicio</th><th class="r">Series</th><th class="r">Reps</th><th>Carga</th><th>Pausa</th></tr></thead><tbody>${ex.map((x,i)=>`<tr><td class="num">${i+1}</td><td><div class="t-name">${esc(x.name)}</div>${x.notes?`<div class="t-mat">${esc(x.notes)}</div>`:''}${mediaHTML(x)}</td><td class="r num">${esc(x.sets)}</td><td class="r num">${esc(x.reps)}</td><td>${esc(x.load)}</td><td>${esc(x.rest)}</td></tr>`).join('')}</tbody></table></div>
- <div class="ex-cards">${ex.map((x,i)=>`<div class="ex-card"><div class="nm"><span class="num" style="color:var(--muted)">${i+1}.</span> ${esc(x.name)}</div><div class="rx">${esc([x.sets&&x.reps?x.sets+' × '+x.reps:(x.sets?x.sets+' series':x.reps),x.load,x.rest?'pausa '+x.rest:''].filter(Boolean).join(' · '))}</div>${x.notes?`<div style="font-size:14px;color:var(--muted)">${esc(x.notes)}</div>`:''}${mediaHTML(x)}</div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin ejercicios cargados.</div>'}</div>`;
+ <div class="sh-sec"><h3>Ejercicios</h3>${ex.length?`<div class="tablewrap sh-table ex-table"><table><thead><tr><th>#</th><th>Ejercicio</th><th class="r">Series</th><th class="r">Reps</th><th>Carga</th><th>Pausa</th></tr></thead><tbody>${ex.map((x,i)=>`${x.block&&(i===0||ex[i-1].block!==x.block)?`<tr class="sh-part"><td colspan="6">${esc(x.block)}</td></tr>`:''}<tr><td class="num">${i+1}</td><td><div class="t-name">${esc(x.name)}</div>${x.notes?`<div class="t-mat">${esc(x.notes)}</div>`:''}${mediaHTML(x)}</td><td class="r num">${esc(x.sets)}</td><td class="r num">${esc(x.reps)}</td><td>${esc(x.load)}</td><td>${esc(x.rest)}</td></tr>`).join('')}</tbody></table></div>
+ <div class="ex-cards">${ex.map((x,i)=>`${x.block&&(i===0||ex[i-1].block!==x.block)?`<div class="ex-block">${esc(x.block)}</div>`:''}<div class="ex-card"><div class="nm"><span class="num" style="color:var(--muted)">${i+1}.</span> ${esc(x.name)}</div><div class="rx">${esc([x.sets&&x.reps?x.sets+' × '+x.reps:(x.sets?x.sets+' series':x.reps),x.load,x.rest?'pausa '+x.rest:''].filter(Boolean).join(' · '))}</div>${x.notes?`<div style="font-size:14px;color:var(--muted)">${esc(x.notes)}</div>`:''}${mediaHTML(x)}</div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin ejercicios cargados.</div>'}</div>`;
 }
 function openRoutineDoc(rid){
  const r=S.routines.find(x=>x.id===rid);if(!r)return;closeModal();
@@ -1039,6 +1104,10 @@ document.addEventListener('click',e=>{
  else if(a==='attall'){document.querySelectorAll('[data-att]').forEach(x=>{x.value=availability(x.dataset.att)[0]!=='Disponible'?'L':'P';x.className='s-'+x.value});attCount()}
  else if(a==='attclear'){document.querySelectorAll('[data-att]').forEach(x=>{x.value='';x.className='s-'});attCount()}
  else if(a==='gtab'){guideTab=b.dataset.k;render()}
+ else if(a==='lpat'){libPat=b.dataset.k;render()}
+ else if(a==='libnew')openLibEdit(null);
+ else if(a==='libedit')openLibEdit(b.dataset.id);
+ else if(a==='libadd'){const ex=libAll().find(v=>v.id===$('#lp_ex').value);if(!ex)return;const box=document.querySelector('[data-rows="exercises"]');const first=box.querySelector('[data-row]');if(first&&box.children.length===1&&!first.querySelector('[data-c="name"]').value.trim())first.remove();box.insertAdjacentHTML('beforeend',rowCard('exercises',{name:ex.name,notes:ex.cue,video:ex.video,img:ex.img},0));renumRows(box);hydrateMedia(box);toast('Agregado: '+ex.name)}
  else if(a==='gyear')openGuideYear();
  else if(a==='gmicro'){e.stopPropagation();openGuideMicro(b.dataset.id)}
  else if(a==='gtpl'){openForm('sessions',null,{tpl:sessionFor({key:b.dataset.k},gPer())})}
@@ -1074,6 +1143,9 @@ document.addEventListener('change',e=>{
  if(e.target.id==='wellDate'){wellDate=e.target.value;render()}
  if(e.target.matches&&e.target.matches('[data-imgup]'))uploadRowImage(e.target);
  if(e.target.id==='gPeriod')saveGuide({period:e.target.value});
+ if(e.target.id==='gModel')saveGuide({model:e.target.value});
+ if(e.target.id==='lp_pat')$('#lp_ex').innerHTML=libPickOpts(e.target.value);
+ if(e.target.id==='lb_pat')$('#lb_groups').innerHTML=libGroups(e.target.value).map(g=>`<option value="${esc(g)}">`).join('');
  if(e.target.id==='gMatch')saveGuide({matchDay:+e.target.value});
  if(e.target.id==='gMatch2')saveGuide({match2:+e.target.value});
  if(e.target.matches&&e.target.matches('#view [data-gday]'))saveGuide({trainDays:[...document.querySelectorAll('#view [data-gday]:checked')].map(c=>+c.value)});
@@ -1089,6 +1161,7 @@ document.addEventListener('submit',e=>{
  if(id==='frm')return submitForm(e);
  if(id==='attFrm')return saveAtt(e);
  if(id==='gyFrm')return createYear(e);
+ if(id==='libFrm')return saveLib(e);
  if(id==='gmFrm')return createGuideSessions(e);
  if(id==='wellFrm'){e.preventDefault();return sendCheckin('well')}
  if(id==='rpeFrm'){e.preventDefault();return sendCheckin('rpe')}

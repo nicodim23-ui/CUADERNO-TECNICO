@@ -21,7 +21,7 @@ page = ('<title>Vista Previa del Cuaderno</title>\n<meta name="claude:viewport-f
         '<style>' + style + '</style>\n' + body +
         '\n<script type="importmap">' + imap + '</script>\n<script>' + (root / 'preview/seed.js').read_text() + '</script>\n<script type="module" src="app.js"></script>\n')
 (out / 'vista-previa.html').write_text(page)
-for f in ['guide.js', 'logo.png']: shutil.copy(root / f, out / f)
+for f in ['guide.js', 'library.js', 'logo.png']: shutil.copy(root / f, out / f)
 (out / 'app.js').write_text(re.sub(r'\.js\?v=\d+', '.js', (root / 'app.js').read_text()))
 shutil.copy(root / 'preview/config.js', out / 'config.js')
 for f in ['app.js', 'auth.js', 'fs.js']: shutil.copy(root / 'preview/stub' / f, out / 'stub' / f)

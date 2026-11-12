@@ -14,7 +14,7 @@ export const PERIODS=[
  {id:'PG',name:'Pretemporada general',when:'Primera mitad de la pretemporada (3 semanas de 6)',
   goals:['Evaluar al plantel y detectar déficits','Construir la base aeróbica y de fuerza','Adaptar músculos y tendones al volumen de carrera','Introducir los principios del modelo de juego'],
   field:'Resistencia intermitente y juegos de posición con el volumen en subida. Técnica todos los días.',
-  gym:'3 sesiones por semana de fuerza base (65–75 %, 3–4 series de 8–10). Nordic y Copenhagen desde la primera semana.',
+  gym:'2–3 sesiones por semana de fuerza base por patrones: rodilla dominante con tracción y cadera dominante con empuje (65–75 %, 3–4 series de 8). Nórdicos y saltos básicos desde la primera semana.',
   sprint:'Técnica de carrera y progresiones al 70–85 %. Aceleraciones cortas desde la semana 2.',
   load:'Volumen alto, intensidad media, 5–6 sesiones. No subir la carga semanal más de un 10–15 % de una semana a la otra.',
   tests:'Semana 1: batería completa de evaluaciones.'},
@@ -56,7 +56,7 @@ export const INFO={
   obj:['Fuerza de tren inferior','Calidad técnica: pase y control orientado','Conservar la pelota en espacios chicos'],mat:['Conos','Pelotas','Pecheras (2 colores)','Material de gimnasio'],space:'Gimnasio + media cancha'},
  'MD-4':{t:'Fuerza específica (tensión)',type:'Físico',load:'Alta',rpe:'7–8',
   goal:'Muchas aceleraciones, frenos, cambios de dirección y duelos.',
-  field:'Espacios reducidos y pocos jugadores (1v1 a 4v4), repeticiones cortas con pausa amplia.',
+  field:'Pliometría corta, espacios reducidos y pocos jugadores (1v1 a 4v4), repeticiones cortas con pausa amplia.',
   gym:'Si no hubo gimnasio en MD-5, va acá antes del campo.',sprint:'Aceleración: salidas de 10–20 m.',
   obj:['Ganar duelos y segundas pelotas','Presión tras pérdida','Aceleración y freno'],mat:['Conos','Pelotas','Pecheras (3 colores)','Mini arcos','2 arcos'],space:'Canchas reducidas'},
  'MD-3':{t:'Resistencia específica (duración)',type:'Táctico',load:'La más alta de la semana',rpe:'7–8',
@@ -79,19 +79,44 @@ export const INFO={
   field:'Rondos, reacción, estrategia 11v11 y pelota parada.',
   gym:'Nada.',sprint:'Reacción y salidas de 5–10 m.',
   obj:['Activar sin cansar','Repasar el plan de partido','Pelota parada a favor y en contra'],mat:['Conos','Pelotas','Pecheras','2 arcos'],space:'Cancha completa'},
+ 'B+2':{t:'Recuperación, excéntrico y compensatorio',type:'Regenerativo',load:'Baja para titulares, alta para suplentes',rpe:'2–4 / 6–8',gps:'Suplentes: unos 4.500 m en total, 350–380 m a alta velocidad, 40–50 m de sprint y 50–60 aceleraciones',
+  goal:'Después del día libre: recuperar a los que jugaron, compensar a los que no y meter la dosis de excéntrico lejos del partido.',
+  field:'Titulares: circuito de recuperación, aeróbico suave y movilidad. Suplentes y no convocados: 7v7 de 25–30 min y carreras de alta intensidad.',
+  gym:'Excéntrico en dosis corta (nórdicos, deslizador, Copenhagen) y tren superior con zona media.',sprint:'Suplentes: carreras de alta intensidad dentro del compensatorio.',
+  obj:['Titulares: recuperar','Suplentes: compensar la carga del partido','Excéntrico lejos del próximo partido'],mat:['Colchonetas y rodillos','Deslizadores','Pecheras','Pelotas','2 arcos'],space:'Gimnasio + media cancha'},
+ 'B-4':{t:'Fuerza explosiva y cambios de dirección',type:'Físico',load:'Alta',rpe:'6–9',gps:'Unos 3.500 m en total, 70–90 m a alta velocidad, 10–20 m de sprint y 80–90 aceleraciones',
+  goal:'El día de más aceleraciones y frenos de la semana: fuerza por contrastes, saltos y espacios reducidos.',
+  field:'Pliometría, cambios de dirección y 5v5 de 20–25 min, con táctica de aceleración y freno.',
+  gym:'Fuerza explosiva por contrastes: serie pesada seguida de saltos.',sprint:'Aceleraciones cortas y cambios de dirección.',
+  obj:['Fuerza explosiva','Acelerar, frenar y cambiar de dirección','Duelos y presión tras pérdida'],mat:['Material de gimnasio','Cajones bajos','Conos','Pecheras','2 arcos'],space:'Gimnasio + canchas reducidas'},
+ 'B-3':{t:'Metabólico y resistencia de juego',type:'Táctico',load:'La más alta de la semana',rpe:'6–9',gps:'5.000–6.000 m en total, 400–450 m a alta velocidad, 70–100 m de sprint y 40–50 aceleraciones',
+  goal:'El día de más volumen: intermitente de alta intensidad y juego en cancha grande.',
+  field:'Intermitente y 10v10 de 40–45 min con las reglas del modelo de juego.',
+  gym:'Sin gimnasio.',sprint:'La carrera a alta velocidad sale del juego en espacio grande.',
+  obj:['Resistencia de juego','Sostener la intensidad en bloques largos','Modelo de juego en espacio real'],mat:['Conos','Pecheras (2 colores)','Pelotas','2 arcos'],space:'Cancha completa'},
+ 'B-2':{t:'Mecánica de carrera y velocidad máxima',type:'Campo',load:'Media',rpe:'5–7',gps:'3.500–4.000 m en total, 150–200 m a alta velocidad, 200–300 m de sprint y 50–60 aceleraciones',
+  goal:'Exposición a la velocidad máxima con el jugador fresco y poco volumen total.',
+  field:'Técnica de carrera, velocidad máxima y táctico de 25–35 min.',
+  gym:'Sin gimnasio.',sprint:'Técnica de carrera, progresivos y 3–5 sprints de 30–40 m por encima del 95 %.',
+  obj:['Superar el 95 % de la velocidad máxima','Mecánica de carrera','Plan de partido'],mat:['Conos','Vallitas','Pecheras','Pelotas'],space:'Cancha completa'},
+ 'B-1':{t:'Activación, reacción y pelota parada',type:'Pre-partido',load:'Baja',rpe:'3–6',
+  goal:'Sesión corta y distendida: activar, repasar la estrategia y la pelota parada.',
+  field:'Juego recreativo, reacción y salidas cortas, estrategia 11v11 y pelota parada.',
+  gym:'Nada. Los que no van al banco pueden hacer un compensatorio aparte.',sprint:'Reacción y salidas de 5–10 m.',
+  obj:['Activar sin cansar','Estrategia del partido','Pelota parada a favor y en contra'],mat:['Conos','Pelotas','Pecheras','2 arcos'],space:'Cancha completa'},
  'MD':{t:'Partido',type:'',load:'Máxima',rpe:'8–10',goal:'Competencia.',field:'Entrada en calor y partido.',gym:'—',sprint:'—'},
  'PG1':{t:'Resistencia aeróbica y gimnasio',type:'Físico',load:'Alta',rpe:'6–7',goal:'Base aeróbica y fuerza base.',
-  field:'Intermitente por grupos de nivel y técnica analítica.',gym:'Fuerza base de tren inferior (35–40 min).',sprint:'Progresiones en la entrada en calor.',
-  obj:['Base aeróbica','Fuerza base de tren inferior','Técnica de pase'],mat:['Conos','Pelotas','Material de gimnasio'],space:'Cancha completa + gimnasio'},
- 'PG2':{t:'Fuerza en campo y técnica de carrera',type:'Físico',load:'Alta',rpe:'7',goal:'Tensión en espacios reducidos y técnica de carrera.',
-  field:'Reducidos 2v2 a 4v4 y centros con finalización.',gym:'Sin gimnasio.',sprint:'Técnica de carrera y progresiones.',
-  obj:['Técnica de carrera','Duelos en espacios reducidos','Finalización'],mat:['Conos','Pelotas','Pecheras (3 colores)','2 arcos'],space:'Canchas reducidas'},
+  field:'Intermitente por grupos de nivel y técnica analítica.',gym:'Rodilla dominante y tracción (40–45 min).',sprint:'Progresiones en la entrada en calor.',
+  obj:['Base aeróbica','Fuerza base: rodilla dominante y tracción','Técnica de pase'],mat:['Conos','Pelotas','Material de gimnasio'],space:'Cancha completa + gimnasio'},
+ 'PG2':{t:'Saltos, técnica de carrera y fuerza en campo',type:'Físico',load:'Alta',rpe:'7',goal:'Aprender a saltar y aterrizar, técnica de carrera y tensión en espacios reducidos.',
+  field:'Pliometría básica y reducidos 2v2 a 4v4.',gym:'Sin gimnasio.',sprint:'Técnica de carrera y progresiones.',
+  obj:['Aterrizar y saltar bien','Técnica de carrera','Duelos en espacios reducidos'],mat:['Conos','Pelotas','Pecheras (3 colores)','2 arcos'],space:'Canchas reducidas'},
  'PG3':{t:'Resistencia específica con pelota',type:'Táctico',load:'Alta',rpe:'7–8',goal:'Volumen de juego en espacios medianos y grandes.',
   field:'Juego de posición, 8v8 y cambios de frente.',gym:'Sin gimnasio.',sprint:'La velocidad alta aparece dentro del juego.',
   obj:['Sostener la intensidad con pelota','Principios ofensivos del modelo','Cambios de frente'],mat:['Conos','Pelotas','Pecheras (2 colores)','2 arcos'],space:'Cancha completa'},
- 'PG4':{t:'Aceleración, gimnasio y juego de posición',type:'Físico',load:'Media-alta',rpe:'6–7',goal:'Aceleraciones, fuerza de tren superior y core, y posesión.',
-  field:'Juego de posición 5v5+2.',gym:'Tren superior y core (30 min).',sprint:'Aceleración: 10–20 m.',
-  obj:['Aceleración','Fuerza de tren superior y core','Conservar la pelota'],mat:['Conos','Pelotas','Pecheras','Material de gimnasio'],space:'Media cancha + gimnasio'},
+ 'PG4':{t:'Aceleración, gimnasio y juego de posición',type:'Físico',load:'Media-alta',rpe:'6–7',goal:'Aceleraciones, fuerza de cadera dominante y empuje, y posesión.',
+  field:'Juego de posición 5v5+2.',gym:'Cadera dominante y empuje (40–45 min).',sprint:'Aceleración: 10–20 m.',
+  obj:['Aceleración','Fuerza: cadera dominante y empuje','Conservar la pelota'],mat:['Conos','Pelotas','Pecheras','Material de gimnasio'],space:'Media cancha + gimnasio'},
  'PG5':{t:'Fútbol formal',type:'Táctico',load:'Alta',rpe:'7',goal:'Juego real para evaluar el modelo y sumar minutos.',
   field:'11v11 en bloques, con correcciones entre bloques.',gym:'Sin gimnasio.',sprint:'—',
   obj:['Modelo de juego en espacio real','Sumar minutos de juego'],mat:['Pelotas','Pecheras (2 colores)','2 arcos'],space:'Cancha completa'},
@@ -160,34 +185,84 @@ export const SPRINT_RULE='Regla práctica: cada jugador debería superar el 90�
 
 /* ---------- plan de gimnasio por período ---------- */
 const x=(name,sets,reps,load,rest,notes='')=>({name,sets,reps,load,rest,notes});
+const blk=(block,...rows)=>rows.map(r=>({...r,block}));
+const prep=()=>blk('Preparación',x('Rodillo y movilidad de tobillo, cadera y columna torácica','1','5 min','—','—','Buscar amplitud, sin apuro'),x('Activación: puente de glúteo y caminata lateral con banda','2','10','Banda','30 s'));
+export const GYM_STRUCTURE=[
+ ['Preparación','Rodillo, movilidad y activación de glúteos y zona media. 8–10 minutos.'],
+ ['Pliometría y potencia','Saltos, aterrizajes o lanzamientos con el cuerpo fresco. Pocas repeticiones y pausa completa.'],
+ ['Fuerza principal','Un patrón básico por sesión: sentadilla, peso muerto o press. Mover la carga con la mayor velocidad posible y lejos del fallo.'],
+ ['Accesorios','Uno o dos ejercicios a una pierna o a un brazo, combinando tren inferior y superior: rodilla dominante con tracción, cadera dominante con empuje.'],
+ ['Core','Ejercicios que frenan el movimiento: anti-extensión, anti-rotación y anti-flexión lateral.'],
+ ['Cierre','Opcional, 12 minutos: 3 a 5 rondas de un empuje, una tracción y un ejercicio de core.']];
 export const GYM=[
- {period:'PG',freq:'3 por semana',when:'Días no consecutivos, antes del campo o en doble turno',goal:'Adaptación y fuerza base. Cargas medias y técnica perfecta.',routines:[
-  {name:'Guía · Pretemporada general A (tren inferior)',category:'Fuerza',duration:40,indications:'Entrada en calor de 8–10 min. Dejar 2 repeticiones de margen en cada serie.',exercises:[
-   x('Sentadilla','4','8','65–75 %','2 min','Profundidad completa y control'),x('Peso muerto rumano','3','8','Media','2 min','Espalda neutra'),x('Zancada búlgara','3','8 por pierna','Mancuernas','90 s'),
-   x('Hip thrust','3','10','Media','90 s'),x('Nordic','3','5','Peso corporal','2 min','Bajar lento'),x('Copenhagen','3','20 s por lado','Peso corporal','45 s'),x('Plancha frontal','3','40 s','Peso corporal','30 s')]},
-  {name:'Guía · Pretemporada general B (tren superior y core)',category:'Fuerza',duration:30,indications:'Complementa la rutina A. Sin llegar al fallo.',exercises:[
-   x('Press de banca','4','8','65–75 %','90 s'),x('Remo con barra','4','8','Media','90 s'),x('Press militar','3','8','Media','90 s'),x('Dominadas','3','6–8','Peso corporal','90 s'),
-   x('Press Pallof','3','10 por lado','Goma','45 s'),x('Rueda abdominal','3','8','Peso corporal','45 s'),x('Gemelos de pie','3','12','Media','45 s')]}]},
+ {period:'PG',freq:'2–3 por semana',when:'Días no consecutivos, antes del campo o en doble turno',goal:'Adaptación y fuerza base por patrones de movimiento. Cargas medias y técnica perfecta.',routines:[
+  {name:'Guía · Pretemporada general A (rodilla dominante y tracción)',category:'Fuerza',duration:45,indications:'Dejar 2 repeticiones de margen en cada serie. La técnica manda sobre la carga.',exercises:[
+   ...prep(),
+   ...blk('Pliometría y potencia',x('Aterrizaje desde cajón bajo','3','5','Peso corporal','45 s','Caer suave y estable'),x('Rebotes de tobillo (pogos)','3','10','Peso corporal','45 s')),
+   ...blk('Fuerza principal',x('Sentadilla trasera','4','8','65–75 %','2 min','Profundidad completa y control')),
+   ...blk('Accesorios',x('Sentadilla búlgara','3','8 por pierna','Mancuernas','90 s'),x('Remo invertido','3','8–10','Peso corporal','60 s'),x('Nórdicos','3','5','Peso corporal','2 min','Bajar lento')),
+   ...blk('Core',x('Plancha frontal','3','5 × 5 s','Peso corporal','30 s'),x('Press Pallof','3','8 por lado','Banda','30 s')),
+   ...blk('Cierre',x('3 rondas: flexiones de brazos, remo a un brazo y plancha lateral','3','10 · 10 por lado · 20 s por lado','Liviana','Sin pausa entre ejercicios'))]},
+  {name:'Guía · Pretemporada general B (cadera dominante y empuje)',category:'Fuerza',duration:45,indications:'Complementa la rutina A. Sin llegar al fallo.',exercises:[
+   ...prep(),
+   ...blk('Pliometría y potencia',x('Salto horizontal','3','4','Peso corporal','60 s','Aterrizaje firme')),
+   ...blk('Fuerza principal',x('Peso muerto con barra hexagonal','4','6–8','65–75 %','2 min','Espalda neutra')),
+   ...blk('Accesorios',x('Empuje de cadera (hip thrust)','3','10','Media','90 s'),x('Peso muerto rumano a una pierna','3','8 por pierna','Mancuerna','60 s'),x('Press de banca con barra','4','8','65–75 %','90 s'),x('Press de rodillas a un brazo','3','8 por lado','Mancuerna','60 s')),
+   ...blk('Core',x('Plancha lateral','3','5 × 5 s por lado','Peso corporal','30 s'),x('Caminata de granjero','3','20 m','Pesada','45 s')),
+   ...blk('Cierre',x('3 rondas: Copenhagen, dominadas con banda y rollout con pelota','3','20 s por lado · 6 · 8','Peso corporal','Sin pausa entre ejercicios'))]}]},
  {period:'PE',freq:'2–3 por semana',when:'MD-5 y MD-4 respecto del amistoso',goal:'Fuerza máxima y potencia. Menos repeticiones, más carga y más velocidad.',routines:[
-  {name:'Guía · Pretemporada específica (fuerza máxima y potencia)',category:'Potencia',duration:40,indications:'Pausas completas. En los saltos, máxima intención en cada repetición.',exercises:[
-   x('Sentadilla','4','4','82–88 %','3 min'),x('Hip thrust','4','5','80–85 %','2 min'),x('Salto con carga liviana (trap bar o mancuernas)','4','4','30–40 %','2 min','Saltar lo más alto posible'),
-   x('Subida al cajón a una pierna','3','5 por pierna','Mancuernas','90 s'),x('Nordic','3','6','Peso corporal','2 min'),x('Saltos al cajón','3','5','Peso corporal','90 s'),x('Copenhagen','3','8 por lado','Peso corporal','45 s')]}]},
- {period:'C',freq:'2 por semana + prevención diaria',when:'Fuerza en MD-5 (o MD-4) y potencia corta en MD-2',goal:'Mantener la fuerza y la potencia con el mínimo volumen, sin llegar cargado al partido.',routines:[
-  {name:'Guía · Competitivo fuerza (MD-5 o MD-4)',category:'Fuerza',duration:35,indications:'Poco volumen y carga alta. Nunca al fallo. Los que jugaron 90 min pueden bajar una serie.',exercises:[
-   x('Sentadilla o trap bar','3','4','80–85 %','3 min'),x('Hip thrust','3','5','80 %','2 min'),x('Peso muerto rumano a una pierna','2','6 por pierna','Mancuerna','90 s'),
-   x('Nordic','2','5','Peso corporal','2 min'),x('Copenhagen','2','8 por lado','Peso corporal','45 s'),x('Core antirrotación','2','10 por lado','Goma','45 s')]},
+  {name:'Guía · Pretemporada específica (fuerza máxima y potencia)',category:'Potencia',duration:45,indications:'Pausas completas. Contraste: después de cada serie pesada de sentadilla, 3 saltos máximos.',exercises:[
+   ...prep(),
+   ...blk('Pliometría y potencia',x('Sentadilla con salto con carga liviana','4','4','30–40 %','2 min','Saltar lo más alto posible'),x('Salto a una pierna con caída en la misma','3','4 por pierna','Peso corporal','60 s')),
+   ...blk('Fuerza principal',x('Sentadilla trasera + 3 saltos (contraste)','4','4','82–88 %','3 min'),x('Empuje de cadera (hip thrust)','4','5','80–85 %','2 min')),
+   ...blk('Accesorios',x('Subida al banco','3','5 por pierna','Mancuernas','90 s'),x('Dominadas con agarre neutro','3','5','Peso corporal','90 s'),x('Nórdicos','3','6','Peso corporal','2 min')),
+   ...blk('Core',x('Rotación con barra anclada','3','6 por lado','Liviana','45 s'),x('Copenhagen','3','8 por lado','Peso corporal','45 s'))]}]},
+ {period:'C',freq:'2 por semana',when:'Fuerza en MD-5 o MD-4 y potencia corta en MD-2',goal:'Mantener la fuerza y la potencia con el mínimo volumen, sin llegar cargado al partido.',routines:[
+  {name:'Guía · Competitivo fuerza (MD-5 o MD-4)',category:'Fuerza',duration:35,indications:'Poco volumen y carga alta. Nunca al fallo. Los que jugaron 90 minutos pueden bajar una serie.',exercises:[
+   ...prep(),
+   ...blk('Pliometría y potencia',x('Salto con contramovimiento con carga liviana','3','4','10–20 % del peso corporal','90 s')),
+   ...blk('Fuerza principal',x('Sentadilla trasera o peso muerto con barra hexagonal','3','4','80–85 %','3 min'),x('Empuje de cadera (hip thrust)','3','5','80 %','2 min')),
+   ...blk('Accesorios',x('Peso muerto rumano a una pierna','2','6 por pierna','Mancuerna','90 s'),x('Remo a un brazo con mancuerna','2','8 por lado','Media','60 s'),x('Nórdicos','2','5','Peso corporal','2 min')),
+   ...blk('Core',x('Copenhagen','2','8 por lado','Peso corporal','45 s'),x('Press Pallof','2','10 por lado','Banda','45 s'))]},
   {name:'Guía · Competitivo potencia (MD-2)',category:'Potencia',duration:15,indications:'Corta y explosiva. Si alguien está cargado, no la hace.',exercises:[
-   x('Salto con contramovimiento con carga liviana','3','4','10–20 % del peso corporal','90 s'),x('Pogos (rebotes de tobillo)','3','10','Peso corporal','60 s'),
-   x('Salto horizontal','3','3','Peso corporal','90 s'),x('Lanzamiento de balón medicinal','3','5','3–5 kg','60 s')]},
-  {name:'Guía · Prevención diaria (10 min)',category:'Prevención',duration:10,indications:'En la entrada en calor de todos los entrenamientos.',exercises:[
-   x('Puente de glúteo a una pierna','2','8 por pierna','Peso corporal','30 s'),x('Copenhagen corto','2','15 s por lado','Peso corporal','30 s'),x('Plancha lateral','2','20 s por lado','Peso corporal','30 s'),
-   x('Caminata lateral con banda','2','10 pasos por lado','Banda','30 s'),x('Gemelo excéntrico','2','10','Peso corporal','30 s'),x('Movilidad de cadera y tobillo','1','2 min','—','—')]}]},
+   ...blk('Pliometría y potencia',x('Salto con contramovimiento con carga liviana','3','4','10–20 % del peso corporal','90 s'),x('Rebotes de tobillo (pogos)','3','10','Peso corporal','60 s'),
+   x('Salto horizontal','3','3','Peso corporal','90 s'),x('Lanzamiento de balón medicinal','3','5','3–5 kg','60 s'))]}]},
  {period:'T',freq:'2–3 por semana',when:'Desde la semana 3 de la transición, por cuenta de cada jugador',goal:'Mantener una base general y llegar sano a la pretemporada.',routines:[
-  {name:'Guía · Transición (general)',category:'Fuerza',duration:40,indications:'Circuito general. Sumar 20–30 min de aeróbico suave 2 veces por semana.',exercises:[
-   x('Sentadilla goblet','3','12','Media','60 s'),x('Zancadas caminando','3','10 por pierna','Mancuernas','60 s'),x('Remo con mancuerna','3','12 por lado','Media','60 s'),
-   x('Flexiones de brazos','3','12','Peso corporal','60 s'),x('Peso muerto rumano a una pierna','3','10 por pierna','Liviana','60 s'),x('Plancha frontal y lateral','3','30 s','Peso corporal','30 s'),x('Movilidad general','1','10 min','—','—')]}]}
+  {name:'Guía · Transición (general)',category:'Fuerza',duration:40,indications:'Circuito general. Sumar 20–30 minutos de aeróbico suave 2 veces por semana.',exercises:[
+   ...blk('Preparación',x('Movilidad general','1','10 min','—','—')),
+   ...blk('Fuerza principal',x('Sentadilla goblet','3','12','Media','60 s'),x('Peso muerto rumano a una pierna','3','10 por pierna','Liviana','60 s')),
+   ...blk('Accesorios',x('Zancada hacia atrás','3','10 por pierna','Mancuernas','60 s'),x('Remo a un brazo con mancuerna','3','12 por lado','Media','60 s'),x('Flexiones de brazos','3','12','Peso corporal','60 s')),
+   ...blk('Core',x('Plancha frontal y lateral','3','30 s','Peso corporal','30 s'))]}]},
+ {period:'X',title:'Core y prevención (todo el año)',freq:'En todas las sesiones',when:'Al inicio, como activación: se busca activar, no fatigar',goal:'La zona media transmite la fuerza entre piernas y brazos, y su trabajo principal es frenar movimientos. Progresión: en los ejercicios con carga, 3 × 8 la primera semana, 3 × 10 la segunda y 3 × 12 la tercera; en los de sostén, 3 series de 5 contracciones de 5 segundos.',routines:[
+  {name:'Guía · Core (zona media)',category:'Core',duration:15,indications:'Elegir un ejercicio de cada bloque por sesión e ir rotando. Respirar normal: no aguantar el aire.',exercises:[
+   ...blk('Anti-extensión',x('Plancha frontal','3','5 × 5 s','Peso corporal','30 s'),x('Rollout con pelota','3','8','Peso corporal','45 s')),
+   ...blk('Anti-rotación',x('Press Pallof','3','8 por lado','Banda','30 s'),x('Plancha estirando un brazo','3','6 por lado','Peso corporal','30 s')),
+   ...blk('Anti-flexión lateral',x('Plancha lateral','3','5 × 5 s por lado','Peso corporal','30 s'),x('Caminata de granjero','3','20 m','Pesada','45 s')),
+   ...blk('Glúteos y estabilidad de cadera',x('Puente de glúteo a una pierna','3','8 por pierna','Peso corporal','30 s'),x('Perro de caza','3','6 por lado','Peso corporal','30 s'))]},
+  {name:'Guía · Prevención diaria (10 min)',category:'Prevención',duration:10,indications:'En la entrada en calor de todos los entrenamientos.',exercises:[
+   x('Puente de glúteo a una pierna','2','8 por pierna','Peso corporal','30 s'),x('Copenhagen','2','15 s por lado','Peso corporal','30 s'),x('Plancha lateral','2','20 s por lado','Peso corporal','30 s'),
+   x('Caminata lateral con banda','2','10 pasos por lado','Banda','30 s'),x('Gemelo excéntrico','2','10','Peso corporal','30 s'),x('Movilidad de cadera y tobillo','1','2 min','—','—')]}]}
 ];
-const GYM_F={PG:'Guía · Pretemporada general A (tren inferior)',PE:'Guía · Pretemporada específica (fuerza máxima y potencia)',C:'Guía · Competitivo fuerza (MD-5 o MD-4)'};
+const GYM_F={PG:'Guía · Pretemporada general A (rodilla dominante y tracción)',PE:'Guía · Pretemporada específica (fuerza máxima y potencia)',C:'Guía · Competitivo fuerza (MD-5 o MD-4)'};
+
+/* ---------- pliometría ---------- */
+export const PLIO_TYPES=[
+ ['Salto','Despegue con dos piernas y caída con dos.'],['Multisalto','Despegue con una pierna y caída con la otra.'],['Salto a una pierna','Despegue y caída con la misma pierna.'],
+ ['Dirección','Lineal, lateral o con giro; hacia arriba o hacia adelante. El fútbol pide las tres.'],
+ ['Forma de inicio','Sin contramovimiento, con contramovimiento, con doble contacto, continuos o con caída desde altura. En ese orden sube la exigencia.']];
+export const PLIO_LEVELS=[
+ {n:1,name:'Aterrizajes',ex:'Aterrizaje desde cajón bajo, lateral y a una pierna',need:'Sin requisito. Es el primer paso para todos.',dose:'3 × 5'},
+ {n:2,name:'Rebotes y saltos simples',ex:'Rebotes de tobillo, salto con contramovimiento, salto al cajón',need:'Aterrizar estable y en silencio.',dose:'3 × 6–10'},
+ {n:3,name:'Saltos repetidos',ex:'Sentadilla con salto, salto horizontal, vallas bajas',need:'Sentadilla con una carga cercana al peso corporal.',dose:'3–4 × 5–6'},
+ {n:4,name:'Saltos a una pierna',ex:'Salto a una pierna hacia adelante y lateral',need:'Buen control de rodilla en el aterrizaje a una pierna.',dose:'3 × 4–5 por pierna'},
+ {n:5,name:'Multisaltos',ex:'Multisaltos alternados, saltos encadenados',need:'Sentadilla cercana a 1,5 veces el peso corporal.',dose:'3 × 6–8 apoyos'},
+ {n:6,name:'Saltos con caída',ex:'Salto con caída desde 30 cm, salto en profundidad',need:'Buena base de fuerza (referencia: sentadilla de 1,5 a 2 veces el peso corporal) y contactos cortos.',dose:'3 × 4–5'}];
+export const PLIO_RULES=[
+ 'Siempre al principio de la sesión, después de la entrada en calor y con el jugador fresco.',
+ 'Calidad antes que cantidad: cada salto a máxima intención y con pausa completa (45–90 segundos entre series).',
+ 'Volumen de referencia por sesión: 40–60 contactos al empezar, 60–100 en nivel intermedio. Una o dos veces por semana.',
+ 'Primero se aprende a aterrizar y después a saltar. No se pasa de nivel si el aterrizaje no es estable.',
+ 'En semana de competencia va en el día de fuerza (MD-4 o MD-5), nunca el día previo al partido con saltos con caída.'];
 
 /* ---------- evaluaciones ---------- */
 export const TESTS=[
@@ -225,7 +300,18 @@ const X={
  wm:{part:'Entrada en calor',name:'Movilidad general',time:10,space:'Media cancha',org:'Todo el grupo',desc:'Movilidad articular y activación suave',mat:''},
  cool:{part:'Vuelta a la calma',name:'Elongación y charla',time:8,space:'',org:'Todo el grupo',desc:'Elongación suave. Cada jugador carga su RPE desde su link.',mat:''},
  gymF:{part:'Parte principal',name:'Gimnasio: fuerza',time:35,space:'Gimnasio',org:'2–3 grupos por estación',desc:'',mat:'Barras, discos, mancuernas'},
- gymB:{part:'Parte principal',name:'Gimnasio: tren superior y core',time:30,space:'Gimnasio',org:'2–3 grupos por estación',desc:'Rutina: Guía · Pretemporada general B (tren superior y core)',mat:'Barras, mancuernas, gomas'},
+ gymB:{part:'Parte principal',name:'Gimnasio: cadera dominante y empuje',time:40,space:'Gimnasio',org:'2–3 grupos por estación',desc:'Rutina: Guía · Pretemporada general B (cadera dominante y empuje)',mat:'Barras, mancuernas, bandas'},
+ gymC:{part:'Parte principal',name:'Gimnasio: fuerza explosiva por contrastes',time:30,space:'Gimnasio',org:'2–3 grupos por estación',desc:'',mat:'Barras, discos, cajones'},
+ plio:{part:'Parte principal',name:'Pliometría: aterrizajes y saltos',time:10,space:'10×10 m',org:'Filas de 4–5',desc:'Aterrizaje desde cajón bajo 2 × 5\nSalto con contramovimiento 3 × 5\nSaltos laterales a una pierna 2 × 4 por pierna\nPausa: 45–60 s. Máxima intención y caída estable',mat:'Cajones bajos, vallas'},
+ spC:{part:'Parte principal',name:'Cambios de dirección',time:10,space:'10×10 m',org:'Filas de 4–5',desc:'4 × 3 repeticiones de 5-0-5 o zigzag de 4 conos\nPausa: 1 min entre repeticiones\nFrenar bajo y salir fuerte, a los dos lados',mat:'Conos'},
+ rec:{part:'Parte principal',name:'Circuito de recuperación',time:12,space:'Gimnasio o costado de la cancha',org:'Los que jugaron más de 60 min',desc:'2–3 vueltas de 6–8 ejercicios, 20 s de trabajo y 20 s de pausa\nMovilidad, tren superior y zona media, sin impacto',mat:'Colchonetas, bandas, rodillos'},
+ cardio:{part:'Parte principal',name:'Aeróbico suave',time:20,space:'Bicicleta fija o perímetro de la cancha',org:'Los que jugaron más de 60 min',desc:'15–20 min a ritmo de conversación',mat:''},
+ ecc:{part:'Parte principal',name:'Excéntrico en dosis corta',time:10,space:'Gimnasio o costado de la cancha',org:'Todo el grupo',desc:'2 series de 5–6 repeticiones\nNórdicos, curl de isquiotibiales con deslizador y Copenhagen\nLejos del próximo partido para que el dolor muscular no llegue al fin de semana',mat:'Deslizadores, colchonetas'},
+ comp7:{part:'Parte principal',name:'Compensatorio: 7v7 con arqueros',time:28,space:'55×40 m',org:'Suplentes y no convocados (14 + arqueros)',desc:'4 × 6 min con 1 min 30 s de pausa\nAlta intensidad con reposición rápida',mat:'Pecheras, pelotas, 2 arcos'},
+ g5:{part:'Parte principal',name:'5v5 con arqueros',time:24,space:'40×30 m',org:'12 jugadores por cancha',desc:'4 × 5 min con 1 min 30 s de pausa\nMuchas aceleraciones, frenos y duelos. Presión tras pérdida',mat:'Pecheras, pelotas, 2 arcos'},
+ hiit:{part:'Parte principal',name:'Intermitente de alta intensidad',time:16,space:'Cancha completa',org:'2–3 grupos por nivel',desc:'2 × 6 min de 15 s de carrera fuerte / 15 s de pausa\nPausa: 3 min entre bloques\nDistancia según la velocidad del 30-15 IFT',mat:'Conos'},
+ g10:{part:'Parte principal',name:'10v10 con arqueros',time:46,space:'Cancha completa',org:'22 jugadores',desc:'4 × 10 min con 2 min de pausa\nResistencia de juego con las reglas del modelo',mat:'Pecheras, pelotas'},
+ tac30:{part:'Parte principal',name:'Táctico: plan de partido',time:30,space:'Cancha completa',org:'22 jugadores',desc:'Bloques cortos a ritmo de partido con pausas para corregir\nPoco volumen: se cuida la frescura',mat:'Pecheras'},
  gymP:{part:'Parte principal',name:'Gimnasio: potencia corta',time:15,space:'Gimnasio o costado de la cancha',org:'Grupos de 4–5',desc:'Rutina: Guía · Competitivo potencia (MD-2)\nSaltos y lanzamientos, sin fatiga',mat:'Balones medicinales'},
  spT:{part:'Parte principal',name:'Sprint: técnica de carrera y progresiones',time:15,space:'40 m',org:'Filas de 4–5',desc:'Skipping, talones y zancadas: 2 × 15 m de cada uno\n4–6 progresiones de 40 m al 70–85 %\nPausa: vuelta caminando',mat:'Conos'},
  spA:{part:'Parte principal',name:'Sprint: aceleración',time:12,space:'20 m',org:'Filas de 4–5',desc:'2 × (4 × 10 m) + 1 × (4 × 20 m), con salidas variadas\nPausa: 1 min por cada 10 m, 3 min entre series',mat:'Conos'},
@@ -245,13 +331,18 @@ const X={
 const TPL={
  'MD+1':['wm','MD+1:0','MD+1:1','MD+1:2','MD+1:3','cool'],
  'MD-5':['w1','gymF','MD-5:0','MD-5:3','cool'],
- 'MD-4':['w1','spA','MD-4:0','MD-4:1','MD-4:2','cool'],
+ 'MD-4':['w1','plio','spA','MD-4:0','MD-4:1','cool'],
+ 'B+2':['wm','rec','cardio','ecc','comp7','MD+1:2','cool'],
+ 'B-4':['w1','gymC','plio','spC','g5','cool'],
+ 'B-3':['w1','hiit','g10','cool'],
+ 'B-2':['w1','spT','spV','tac30','cool'],
+ 'B-1':['MD-1:0','MD-1:1','MD-1:2','MD-1:3','cool'],
  'MD-3':['w1','MD-3:2','MD-3:1','cool'],
  'MD-2':['w1','gymP','spV','MD-2:0','MD-2:4','cool'],
  'MD-2c':['w1','MD-2:2','spS','tac','MD-2:4','cool'],
  'MD-1':['MD-1:0','MD-1:1','MD-1:2','MD-1:3','cool'],
  'PG1':['w1','aer','MD-5:0','gymF','cool'],
- 'PG2':['w1','spT','MD-4:1','MD-4:2','MD-5:4','cool'],
+ 'PG2':['w1','spT','plio','MD-4:1','MD-4:2','cool'],
  'PG3':['w1','MD-3:2','MD-3:0','MD-3:3','cool'],
  'PG4':['w1','spA','gymB','MD-5:3','cool'],
  'PG5':['w1','MD-5:2','f11','cool'],
@@ -259,13 +350,13 @@ const TPL={
  'EV1':['ev1a','w1','ev1b','ev1c','MD-5:2','cool'],
  'EV2':['w1','ev2a','ev2b','cool']
 };
-export const TEMPLATE_KEYS=['MD+1','MD-5','MD-4','MD-3','MD-2','MD-2c','MD-1','PG1','PG2','PG3','PG4','PG5','PG6','EV1','EV2'];
-export const mdLabel=k=>k==='MD-2c'?'MD-2':k.startsWith('PG')?'Día '+k.slice(2):k.startsWith('EV')?'Evaluación '+k.slice(2):k;
+export const TEMPLATE_KEYS=['MD+1','MD-5','MD-4','MD-3','MD-2','MD-2c','MD-1','B+2','B-4','B-3','B-2','B-1','PG1','PG2','PG3','PG4','PG5','PG6','EV1','EV2'];
+export const mdLabel=k=>k==='MD-2c'?'MD-2':/^B[+-]\d$/.test(k)?'MD'+k.slice(1):k.startsWith('PG')?'Día '+k.slice(2):k.startsWith('EV')?'Evaluación '+k.slice(2):k;
 
 function taskOf(id,period,key){
- if(X[id]){const t={...X[id]};if(id==='gymF')t.desc='Rutina: '+(GYM_F[period]||GYM_F.C);return t}
+ if(X[id]){const t={...X[id]};if(id==='gymF')t.desc='Rutina: '+(GYM_F[period]||GYM_F.C);if(id==='gymC')t.desc='Rutina: '+(GYM_F[period==='PE'?'PE':'C'])+'\nContraste: después de cada serie pesada, 3–4 saltos máximos';return t}
  const [code,i]=id.split(':');const p=OPT[code][+i];
- const part=key==='MD-1'&&id==='MD-1:0'?'Entrada en calor':'Parte principal';
+ const part=(key==='MD-1'||key==='B-1')&&id==='MD-1:0'?'Entrada en calor':'Parte principal';
  return {part,name:p.name,time:p.min,space:p.space,org:p.players,desc:p.work+(p.rest&&p.rest!=='—'?'\nPausa: '+p.rest:'')+'\n'+p.notes,mat:''};
 }
 /** Arma la sesión de un día. e = {key, last, gym}; period = PG | PE | C */
@@ -275,12 +366,12 @@ export function sessionFor(e,period='C'){
  if(period==='PE')ids=ids.map(v=>v==='spA'?'spR':v);
  if(e.last)ids.splice(ids.length-1,0,...(ids.includes('MD-2:4')?['pre']:['MD-2:4','pre']));
  const tasks=ids.map(id=>taskOf(id,period,key));const info=INFO[key];
- return {type:info.type,focus:(key.startsWith('MD')?mdLabel(key)+' · ':'')+info.t+(e.last?' + previa del partido':''),objectives:info.obj.join('\n'),materials:info.mat.join('\n'),space:info.space,
-  duration:key==='MD+1'?60:tasks.reduce((a,t)=>a+t.time,0),tasks,gcode:key};
+ return {type:info.type,focus:(/^(MD|B)/.test(key)?mdLabel(key)+' · ':'')+info.t+(e.last?' + previa del partido':''),objectives:info.obj.join('\n'),materials:info.mat.join('\n'),space:info.space,
+  duration:key==='MD+1'?60:key==='B+2'?75:tasks.reduce((a,t)=>a+t.time,0),tasks,gcode:key};
 }
 
 /** Distribución de la semana. matchDay y match2: 0 = domingo … 6 = sábado, -1 = sin partido. */
-export function weekLayout({period='C',matchDay=0,match2=-1,trainDays=[1,2,3,4,5],gweek=2}){
+export function weekLayout({period='C',matchDay=0,match2=-1,trainDays=[1,2,3,4,5],gweek=2,model='A'}){
  const noMatch=period==='PG'||period==='T'||matchDay<0;
  const ms=noMatch?[]:[matchDay,...(match2>=0&&match2!==matchDay&&period==='C'?[match2]:[])];
  const start=noMatch?1:(matchDay+1)%7;const out=[];let n=0;
@@ -289,11 +380,18 @@ export function weekLayout({period='C',matchDay=0,match2=-1,trainDays=[1,2,3,4,5
   if(ms.length){
    const dn=Math.min(...ms.map(m=>(m-wd+7)%7)),dp=Math.min(...ms.map(m=>(wd-m+7)%7));
    code=dn===0?'MD':dn===1?'MD-1':dp===1?'MD+1':dp+dn<=4?'MD-2c':'MD-'+dn;
-   if(tr&&code!=='MD')key=code;
+   if(model==='B'&&ms.length===1){
+    // Modelo B: MD+1 libre, MD+2 recuperación y compensatorio, MD-4 fuerza explosiva, MD-3 metabólico, MD-2 velocidad
+    if(dp===2)code='MD+2';
+    if(tr&&code!=='MD'&&code!=='MD+1')key=code==='MD+2'?'B+2':code==='MD-1'?'B-1':'B'+code.slice(2);
+    if(code==='MD+1')out.push({wd,code,key:null,train:false,rest:true});
+   }else if(tr&&code!=='MD')key=code;
+   if(model==='B'&&ms.length===1&&code==='MD+1')continue;
   }else if(tr&&period!=='T'){key=period==='PG'&&gweek===1&&n<2?'EV'+(n+1):'PG'+((n%6)+1);code=key;n++}
   out.push({wd,code,key,train:!!key});
  }
  if(ms.length)for(let i=0;i<7;i++)if(out[i].code==='MD')for(let j=1;j<7;j++){const e=out[(i-j+7)%7];if(e.code==='MD')break;if(e.train){if(e.code!=='MD-1'&&e.code!=='MD+1')e.last=true;break}}
+ out.sort((a,b)=>((a.wd-start+7)%7)-((b.wd-start+7)%7));
  const has5=out.some(e=>e.key==='MD-5');out.forEach(e=>{if(e.key==='MD-4'&&!has5)e.gym=true});
  return out;
 }

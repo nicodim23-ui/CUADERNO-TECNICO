@@ -12,6 +12,7 @@ App web para que el cuerpo técnico registre plantel, entrenamientos, tests, les
 |---|---|
 | `index.html` | Estructura y estilos de la app |
 | `app.js` | Funcionamiento de la app |
+| `library.js` | Biblioteca de ejercicios por patrón de movimiento |
 | `guide.js` | Guía de planificación: contenidos y armado automático de la temporada |
 | `preview/` | Vista previa con datos de ejemplo (no se usa en la app real) |
 | `config.js` | Datos del proyecto de Firebase |
