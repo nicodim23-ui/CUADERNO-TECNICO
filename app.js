@@ -287,14 +287,18 @@ const ROWDEF={
   {c:'space',l:'Espacio',t:'text',ph:'Ej: 30×20 m'},
   {c:'org',l:'Organización',t:'text',ph:'Ej: 3 grupos de 6'},
   {c:'mat',l:'Materiales',t:'text',w:'full',ph:'Ej: 12 conos, 6 pecheras'},
-  {c:'desc',l:'Desarrollo y consignas',t:'textarea',w:'full'}]},
+  {c:'desc',l:'Desarrollo y consignas',t:'textarea',w:'full'},
+  {c:'video',l:'Video (link de YouTube)',t:'url',w:'full',ph:'https://youtu.be/…'},
+  {c:'img',l:'Imagen o gráfico',t:'image',w:'full'}]},
  exercises:{add:'+ Agregar ejercicio',label:'Ejercicio',cols:[
   {c:'name',l:'Ejercicio',t:'text',w:'full',ph:'Ej: Sentadilla búlgara'},
   {c:'sets',l:'Series',t:'text',w:'q',ph:'4'},
   {c:'reps',l:'Reps o tiempo',t:'text',w:'q',ph:'8 c/pierna'},
   {c:'load',l:'Carga',t:'text',w:'q',ph:'20 kg / 70%'},
   {c:'rest',l:'Pausa',t:'text',w:'q',ph:'90 s'},
-  {c:'notes',l:'Indicaciones',t:'text',w:'full',ph:'Técnica, tempo, progresión'}]}
+  {c:'notes',l:'Indicaciones',t:'text',w:'full',ph:'Técnica, tempo, progresión'},
+  {c:'video',l:'Video (link de YouTube)',t:'url',w:'full',ph:'https://youtu.be/…'},
+  {c:'img',l:'Imagen del ejercicio',t:'image',w:'full'}]}
 };
 
 /* ---------- render ---------- */
@@ -500,12 +504,34 @@ function fieldHTML(f,v){
   inp=`<input id="${id}" name="${f.k}" type="${f.t}" ${req} ${list} value="${esc(v)}" ${f.min!=null?`min="${f.min}"`:''} ${f.max!=null?`max="${f.max}"`:''} ${f.step?`step="${f.step}"`:''} placeholder="${esc(f.ph||'')}" ${f.t==='number'?'inputmode="decimal"':''}>${f.list?`<datalist id="dl_${f.k}">${f.list.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>`:''}`;}
  return `<div class="fld${full}"><label for="${id}">${f.l}${f.req?' *':''}</label>${inp}${f.hint?`<span class="hint">${f.hint}</span>`:''}</div>`;
 }
+/* videos e imágenes de tareas y ejercicios */
+const safeUrl=u=>/^https?:\/\/[^\s"'<>]+$/i.test(u||'')?u:'';
+const okMedia=v=>/^[A-Za-z0-9]{12,40}$/.test(v||'');
+const mediaHTML=x=>`${okMedia(x.img)?`<img class="t-img" data-media="${x.img}" alt="" hidden>`:''}${safeUrl(x.video)?`<div><a class="vid noprint" href="${esc(x.video)}" target="_blank" rel="noopener">▶ Ver video</a></div>`:''}`;
+const MEDIA=new Map();
+function mediaSrc(id){if(!MEDIA.has(id))MEDIA.set(id,getDoc(doc(db,'public',id)).then(s=>{const d=s.exists()?s.data().data:'';return typeof d==='string'&&d.startsWith('data:image/')?d:''}).catch(()=>{MEDIA.delete(id);return ''}));return MEDIA.get(id)}
+function hydrateMedia(root){(root||document).querySelectorAll('img[data-media]:not([src])').forEach(im=>{mediaSrc(im.dataset.media).then(src=>{if(src){im.src=src;im.hidden=false}})})}
+function compressImage(file,max,q){return new Promise((res,rej)=>{const url=URL.createObjectURL(file);const im=new Image();
+ im.onload=()=>{const k=Math.min(1,max/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*k));c.height=Math.max(1,Math.round(im.height*k));const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(url);res(c.toDataURL('image/jpeg',q))};
+ im.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('img'))};im.src=url})}
+async function uploadRowImage(inp){
+ const f=inp.files&&inp.files[0];if(!f)return;const box=inp.closest('.imgfld');const msg=box.querySelector('.imgmsg');msg.textContent='Preparando la imagen…';
+ try{
+  let data=await compressImage(f,1000,.72);if(data.length>600000)data=await compressImage(f,720,.6);if(data.length>900000)throw new Error('big');
+  const id=randId(20);MEDIA.set(id,Promise.resolve(data));
+  setDoc(doc(db,'public',id),{type:'img',data,at:new Date().toISOString()}).catch(err=>toast(err&&err.code==='permission-denied'?'Falta actualizar las reglas de Firebase para guardar imágenes.':'No se pudo guardar la imagen. Revisá la conexión.'));
+  box.querySelector('input[type=hidden]').value=id;const im=box.querySelector('img');im.src=data;im.hidden=false;box.querySelector('[data-act=imgdel]').hidden=false;msg.textContent='';
+ }catch(e){msg.textContent='No se pudo usar esa imagen. Probá con otra.'}
+ inp.value='';
+}
 function rowCard(key,r,i){
  const def=ROWDEF[key];const uid=randId(6);
  return `<div class="rowcard" data-row><div class="rc-head"><b>${def.label} <span class="rc-n">${i+1}</span></b><span class="tools" style="gap:2px"><button type="button" class="btn ghost sm" data-act="rowup" aria-label="Subir">↑</button><button type="button" class="btn ghost sm" data-act="rowdown" aria-label="Bajar">↓</button><button type="button" class="btn ghost sm danger" data-act="rowdel">Quitar</button></span></div>
  <div class="rc-grid">${def.cols.map(c=>{const id=`r_${key}_${uid}_${c.c}`;const v=r[c.c]??'';const w=c.w==='full'?' full':c.w==='q'?' q':'';
   let inp;if(c.t==='select')inp=`<select id="${id}" data-c="${c.c}">${c.opts.map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
   else if(c.t==='textarea')inp=`<textarea id="${id}" data-c="${c.c}" rows="3">${esc(v)}</textarea>`;
+  else if(c.t==='image'){const ok=okMedia(v);inp=`<div class="imgfld"><input type="hidden" data-c="${c.c}" value="${ok?esc(v):''}"><img ${ok?`data-media="${esc(v)}"`:''} alt="" hidden><label class="btn sm filebtn" for="${id}">Elegir imagen</label><input type="file" id="${id}" accept="image/*" data-imgup><button type="button" class="btn ghost sm danger" data-act="imgdel" ${ok?'':'hidden'}>Quitar</button><span class="hint imgmsg"></span></div>`}
+  else if(c.t==='url')inp=`<input id="${id}" data-c="${c.c}" type="url" inputmode="url" autocapitalize="off" value="${esc(v)}" placeholder="${esc(c.ph||'')}">`;
   else inp=`<input id="${id}" data-c="${c.c}" type="${c.t==='number'?'number':'text'}" ${c.t==='number'?'inputmode="numeric" min="0"':''} value="${esc(v)}" placeholder="${esc(c.ph||'')}">`;
   return `<div class="fld${w}"><label for="${id}">${c.l}</label>${inp}</div>`}).join('')}</div></div>`;
 }
@@ -530,13 +556,13 @@ function openForm(key,id,o={}){
  $('#mTitle').textContent=(id?'Editar ':o.copy?'Duplicar ':'Nuevo ')+sc.one;
  $('#mBody').innerHTML=`<form class="form" id="frm" novalidate>${sc.fields.map(f=>{let v=d?d[f.k]:(f.k in defs?defs[f.k]:(f.def==='today'?today():''));return fieldHTML(f,v??'')}).join('')}
  <div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">${id?'Guardar cambios':'Guardar'}</button></div></form>`;
- showModal();
+ hydrateMedia($('#mBody'));showModal();
 }
 function readForm(){
  const {key}=editing;const out={};const frm=$('#frm');
  for(const f of SCHEMA[key].fields){
   if(f.t==='players'){out[f.k]=[...frm.querySelectorAll(`[data-group="${f.k}"] input:checked`)].map(c=>c.value);continue}
-  if(f.t==='rows'){const def=ROWDEF[f.k];out[f.k]=[...frm.querySelectorAll(`[data-rows="${f.k}"] [data-row]`)].map(card=>{const r={};def.cols.forEach(c=>{let v=card.querySelector(`[data-c="${c.c}"]`).value.trim();if(c.t==='number'&&v!==''){v=Number(v.replace(',','.'));if(isNaN(v))v=''}r[c.c]=v});return r}).filter(r=>r.name);continue}
+  if(f.t==='rows'){const def=ROWDEF[f.k];out[f.k]=[...frm.querySelectorAll(`[data-rows="${f.k}"] [data-row]`)].map(card=>{const r={};def.cols.forEach(c=>{let v=card.querySelector(`[data-c="${c.c}"]`).value.trim();if(c.t==='number'&&v!==''){v=Number(v.replace(',','.'));if(isNaN(v))v=''}if(c.t==='url'&&v&&!/^https?:\/\//i.test(v))v='https://'+v;r[c.c]=v});return r}).filter(r=>r.name);continue}
   const el=frm.elements[f.k];if(!el)continue;let v=el.value.trim();
   if(f.req&&!v){el.focus();toast(`Completá “${f.l}”.`);return null}
   if(f.t==='number'&&v!==''){v=Number(v.replace(',','.'));if(isNaN(v)){el.focus();toast(`“${f.l}” tiene que ser un número.`);return null}}
@@ -788,7 +814,7 @@ function vGym(){
  return out;
 }
 function publicRoutine(r){
- return {type:'routine',club:club.name||'',name:r.name||'',category:r.category||'',duration:r.duration??'',target:r.target||'',indications:r.indications||'',exercises:(r.exercises||[]).filter(x=>x&&x.name).map(x=>({name:x.name||'',sets:x.sets||'',reps:x.reps||'',load:x.load||'',rest:x.rest||'',notes:x.notes||''})),updatedAt:new Date().toISOString()};
+ return {type:'routine',club:club.name||'',name:r.name||'',category:r.category||'',duration:r.duration??'',target:r.target||'',indications:r.indications||'',exercises:(r.exercises||[]).filter(x=>x&&x.name).map(x=>({name:x.name||'',sets:x.sets||'',reps:x.reps||'',load:x.load||'',rest:x.rest||'',notes:x.notes||'',video:safeUrl(x.video),img:okMedia(x.img)?x.img:''})),updatedAt:new Date().toISOString()};
 }
 function shareRoutine(id){
  const r=S.routines.find(x=>x.id===id);if(!r)return;
@@ -805,7 +831,7 @@ function shareRoutine(id){
 }
 
 /* ---------- hojas (sesión y rutina) ---------- */
-function openDoc(html,bar){$('#docBar').innerHTML=bar;$('#docPage').innerHTML=html;$('#doc').hidden=false;$('#doc').scrollTop=0;document.body.style.overflow='hidden'}
+function openDoc(html,bar){$('#docBar').innerHTML=bar;$('#docPage').innerHTML=html;hydrateMedia($('#docPage'));$('#doc').hidden=false;$('#doc').scrollTop=0;document.body.style.overflow='hidden'}
 function closeDoc(){if($('#doc').hidden)return;$('#doc').hidden=true;if($('#modal').hidden)document.body.style.overflow=''}
 const sheetHead=(title,no)=>`<div class="sh-head"><img src="logo.png" alt="Escudo del club"><div style="min-width:0"><div class="sh-club">${esc(club.name||'Cuerpo técnico')}</div><div class="eyebrow">${title}</div></div>${no!=null?`<div class="sh-no"><div class="k">Sesión N°</div><div class="v">${no}</div></div>`:''}</div>`;
 function sessionSheet(s){
@@ -818,7 +844,7 @@ function sessionSheet(s){
  +(s.focus?`<div class="sh-sec"><h3>Objetivo general</h3><div style="font-size:16px;font-weight:600">${esc(s.focus)}</div></div>`:'')
  +`<div class="sh-cols"><div class="sh-sec"><h3>Objetivos específicos</h3>${lines(s.objectives).length?`<ul>${lines(s.objectives).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'<div style="color:var(--muted)">—</div>'}</div><div class="sh-sec"><h3>Materiales</h3>${lines(s.materials).length?`<ul>${lines(s.materials).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'<div style="color:var(--muted)">—</div>'}</div></div>`
  +`<div class="sh-sec"><h3>Tareas</h3>${tasks.length?`<div class="tablewrap sh-table"><table><thead><tr><th>#</th><th>Tarea y consignas</th><th>Organización</th><th>Espacio</th><th class="r">Min</th></tr></thead><tbody>${tasks.map((t,i)=>{const ph=t.part&&t.part!==lastPart?`<tr class="sh-part"><td colspan="5">${esc(t.part)}</td></tr>`:'';lastPart=t.part;
-  return ph+`<tr><td class="num">${i+1}</td><td><div class="t-name">${esc(t.name)}</div>${t.desc?`<div class="t-desc">${esc(t.desc)}</div>`:''}${t.mat?`<div class="t-mat">Materiales: ${esc(t.mat)}</div>`:''}</td><td>${esc(t.org||'')}</td><td>${esc(t.space||'')}</td><td class="r num">${isNum(t.time)?+t.time:''}</td></tr>`}).join('')}<tr class="sh-total"><td colspan="4">Tiempo total de tareas</td><td class="r num">${total||''}</td></tr></tbody></table></div>`:'<div style="color:var(--muted)">Todavía no se cargaron tareas. Tocá Editar para agregarlas.</div>'}</div>`
+  return ph+`<tr><td class="num">${i+1}</td><td><div class="t-name">${esc(t.name)}</div>${t.desc?`<div class="t-desc">${esc(t.desc)}</div>`:''}${t.mat?`<div class="t-mat">Materiales: ${esc(t.mat)}</div>`:''}${mediaHTML(t)}</td><td>${esc(t.org||'')}</td><td>${esc(t.space||'')}</td><td class="r num">${isNum(t.time)?+t.time:''}</td></tr>`}).join('')}<tr class="sh-total"><td colspan="4">Tiempo total de tareas</td><td class="r num">${total||''}</td></tr></tbody></table></div>`:'<div style="color:var(--muted)">Todavía no se cargaron tareas. Tocá Editar para agregarlas.</div>'}</div>`
  +(s.notes?`<div class="sh-sec"><h3>Observaciones</h3><div style="white-space:pre-wrap">${esc(s.notes)}</div></div>`:'');
 }
 function openSessionDoc(sid){
@@ -832,8 +858,8 @@ function routineSheet(r){
  <h1 class="sh-title">${esc(r.name)}</h1>
  ${meta.length?`<div class="sh-meta">${meta.map(m=>`<div><div class="k">${m[0]}</div><div class="v">${esc(m[1])}</div></div>`).join('')}</div>`:''}
  ${r.indications?`<div class="sh-sec"><h3>Indicaciones</h3><div style="white-space:pre-wrap">${esc(r.indications)}</div></div>`:''}
- <div class="sh-sec"><h3>Ejercicios</h3>${ex.length?`<div class="tablewrap sh-table ex-table"><table><thead><tr><th>#</th><th>Ejercicio</th><th class="r">Series</th><th class="r">Reps</th><th>Carga</th><th>Pausa</th></tr></thead><tbody>${ex.map((x,i)=>`<tr><td class="num">${i+1}</td><td><div class="t-name">${esc(x.name)}</div>${x.notes?`<div class="t-mat">${esc(x.notes)}</div>`:''}</td><td class="r num">${esc(x.sets)}</td><td class="r num">${esc(x.reps)}</td><td>${esc(x.load)}</td><td>${esc(x.rest)}</td></tr>`).join('')}</tbody></table></div>
- <div class="ex-cards">${ex.map((x,i)=>`<div class="ex-card"><div class="nm"><span class="num" style="color:var(--muted)">${i+1}.</span> ${esc(x.name)}</div><div class="rx">${esc([x.sets&&x.reps?x.sets+' × '+x.reps:(x.sets?x.sets+' series':x.reps),x.load,x.rest?'pausa '+x.rest:''].filter(Boolean).join(' · '))}</div>${x.notes?`<div style="font-size:14px;color:var(--muted)">${esc(x.notes)}</div>`:''}</div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin ejercicios cargados.</div>'}</div>`;
+ <div class="sh-sec"><h3>Ejercicios</h3>${ex.length?`<div class="tablewrap sh-table ex-table"><table><thead><tr><th>#</th><th>Ejercicio</th><th class="r">Series</th><th class="r">Reps</th><th>Carga</th><th>Pausa</th></tr></thead><tbody>${ex.map((x,i)=>`<tr><td class="num">${i+1}</td><td><div class="t-name">${esc(x.name)}</div>${x.notes?`<div class="t-mat">${esc(x.notes)}</div>`:''}${mediaHTML(x)}</td><td class="r num">${esc(x.sets)}</td><td class="r num">${esc(x.reps)}</td><td>${esc(x.load)}</td><td>${esc(x.rest)}</td></tr>`).join('')}</tbody></table></div>
+ <div class="ex-cards">${ex.map((x,i)=>`<div class="ex-card"><div class="nm"><span class="num" style="color:var(--muted)">${i+1}.</span> ${esc(x.name)}</div><div class="rx">${esc([x.sets&&x.reps?x.sets+' × '+x.reps:(x.sets?x.sets+' series':x.reps),x.load,x.rest?'pausa '+x.rest:''].filter(Boolean).join(' · '))}</div>${x.notes?`<div style="font-size:14px;color:var(--muted)">${esc(x.notes)}</div>`:''}${mediaHTML(x)}</div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin ejercicios cargados.</div>'}</div>`;
 }
 function openRoutineDoc(rid){
  const r=S.routines.find(x=>x.id===rid);if(!r)return;closeModal();
@@ -873,13 +899,14 @@ function bigRender(){
   main=`<div class="big-eyebrow">${esc(s.type||'Sesión')} · ${sessDuration(s)?sessDuration(s)+' min':''}${s.space?' · '+esc(s.space):''}</div><h1 class="big-title">${esc(s.focus||'Sesión N° '+n)}</h1>
   <div class="big-cols">${objs.length?`<div><h3>Objetivos</h3><ul class="big-list">${objs.map(o=>`<li>${esc(o)}</li>`).join('')}</ul></div>`:''}<div><h3>Tareas</h3><ul class="big-list">${tasks.map((x,k)=>`<li><span class="tm">${isNum(x.time)?x.time+"'":''}</span><span>${k+1}. ${esc(x.name)}</span></li>`).join('')||'<li>Sin tareas cargadas</li>'}</ul></div>${mats.length?`<div><h3>Materiales</h3><ul class="big-list">${mats.map(o=>`<li>${esc(o)}</li>`).join('')}</ul></div>`:''}</div>`}
  else main=`<div class="big-eyebrow">${esc(t.part||'')} · Tarea ${i} de ${tasks.length}</div><h1 class="big-title">${esc(t.name)}</h1>
-  <div class="big-meta">${isNum(t.time)?`<span>⏱ ${+t.time} min</span>`:''}${t.space?`<span>Espacio: ${esc(t.space)}</span>`:''}${t.org?`<span>${esc(t.org)}</span>`:''}${t.mat?`<span>Materiales: ${esc(t.mat)}</span>`:''}</div>${t.desc?`<div class="big-desc">${esc(t.desc)}</div>`:''}`;
+  <div class="big-meta">${isNum(t.time)?`<span>⏱ ${+t.time} min</span>`:''}${t.space?`<span>Espacio: ${esc(t.space)}</span>`:''}${t.org?`<span>${esc(t.org)}</span>`:''}${t.mat?`<span>Materiales: ${esc(t.mat)}</span>`:''}</div><div class="big-body">${t.desc?`<div class="big-desc">${esc(t.desc)}</div>`:''}${okMedia(t.img)?`<img class="big-img" data-media="${t.img}" alt="" hidden>`:''}</div>${safeUrl(t.video)?`<div><a class="big-tbtn" style="text-decoration:none;display:inline-block" href="${esc(t.video)}" target="_blank" rel="noopener">▶ Ver video</a></div>`:''}`;
  $('#big').innerHTML=`<div class="big-top"><div class="l"><img src="logo.png" alt=""><div style="min-width:0"><div class="t">Sesión N° ${n}</div><div class="s">${esc(longDate(s.date))}${s.time?' · '+esc(s.time)+' h':''}</div></div></div><button class="big-x" type="button" data-act="bexit">Salir</button></div>
  <div class="big-prog">${[0,...tasks.map((_,k)=>k+1)].map(k=>`<i class="${k<=i?'on':''}"></i>`).join('')}</div>
  <div class="big-main">${main}</div>
  <div class="big-bot"><button class="big-nav" type="button" data-act="bprev" ${i===0?'disabled':''}>← Anterior</button>
  <div class="big-timer">${t?`<span class="big-time ${BIG.left===0&&isNum(t.time)?'done':''}" id="bigTime">${mmss(BIG.left)}</span><button class="big-tbtn" type="button" data-act="btimer">${BIG.run?'Pausar':'Iniciar'}</button><button class="big-tbtn" type="button" data-act="breset">Reiniciar</button>`:`<span class="big-hint">Tocá Siguiente para empezar con la primera tarea</span>`}</div>
  <button class="big-nav" type="button" data-act="bnext" ${i>=tasks.length?'disabled':''}>Siguiente →</button></div>`;
+ hydrateMedia($('#big'));
 }
 function bigGo(d){if(!BIG)return;const s=S.sessions.find(x=>x.id===BIG.sid);const max=sessTasks(s).length;const ni=Math.min(max,Math.max(0,BIG.i+d));if(ni===BIG.i)return;clearInterval(BIG.iv);BIG.run=false;BIG.i=ni;BIG.left=null;bigRender()}
 function bigBeep(){try{const ctx=BIG.ctx;if(!ctx)return;[0,.4,.8].forEach(t=>{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=880;o.connect(g);g.connect(ctx.destination);const at=ctx.currentTime+t;g.gain.setValueAtTime(.0001,at);g.gain.exponentialRampToValueAtTime(.5,at+.02);g.gain.exponentialRampToValueAtTime(.0001,at+.3);o.start(at);o.stop(at+.32)})}catch(_){}}
@@ -1005,6 +1032,7 @@ document.addEventListener('click',e=>{
  else if(a==='nshare'){navigator.share({title:b.dataset.text,text:b.dataset.text,url:b.dataset.url}).catch(()=>{})}
  else if(a==='copylink'){const i=$('#shareUrl');const done=()=>toast('Link copiado');navigator.clipboard?navigator.clipboard.writeText(i.value).then(done).catch(()=>{i.select();document.execCommand('copy');done()}):(i.select(),document.execCommand('copy'),done())}
  else if(a==='rowadd'){const box=document.querySelector(`[data-rows="${b.dataset.k}"]`);const last=box.querySelector('[data-row]:last-child [data-c="part"]');box.insertAdjacentHTML('beforeend',rowCard(b.dataset.k,last?{part:last.value}:{},0));renumRows(box);const nw=box.lastElementChild.querySelector('[data-c="name"]');nw&&nw.focus()}
+ else if(a==='imgdel'){const box=b.closest('.imgfld');box.querySelector('input[type=hidden]').value='';const im=box.querySelector('img');im.hidden=true;im.removeAttribute('src');im.removeAttribute('data-media');b.hidden=true}
  else if(a==='rowdel'){const card=b.closest('[data-row]');const box=card.parentElement;card.remove();renumRows(box)}
  else if(a==='rowup'){const card=b.closest('[data-row]');if(card.previousElementSibling){card.parentElement.insertBefore(card,card.previousElementSibling);renumRows(card.parentElement)}}
  else if(a==='rowdown'){const card=b.closest('[data-row]');if(card.nextElementSibling){card.parentElement.insertBefore(card.nextElementSibling,card);renumRows(card.parentElement)}}
@@ -1044,6 +1072,7 @@ document.addEventListener('change',e=>{
  if(e.target.id==='injFilter'){injFilter=e.target.value;render()}
  if(e.target.id==='attRange'){attRange=e.target.value;render()}
  if(e.target.id==='wellDate'){wellDate=e.target.value;render()}
+ if(e.target.matches&&e.target.matches('[data-imgup]'))uploadRowImage(e.target);
  if(e.target.id==='gPeriod')saveGuide({period:e.target.value});
  if(e.target.id==='gMatch')saveGuide({matchDay:+e.target.value});
  if(e.target.id==='gMatch2')saveGuide({match2:+e.target.value});

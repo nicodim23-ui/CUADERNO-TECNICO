@@ -367,6 +367,20 @@ input.flt{border:1px solid var(--line);background:var(--surface);border-radius:8
 .seg-ends{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
 .sent{margin:0;color:var(--ok);font-weight:600;text-align:center}
 
+/* Videos e imágenes de tareas y ejercicios */
+.t-img{display:block;max-width:min(100%,320px);max-height:260px;border-radius:8px;border:1px solid var(--line);margin-top:8px;background:#fff}
+.vid{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-weight:600;font-size:13px;color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+.vid:hover{border-color:var(--accent)}
+.imgfld{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.imgfld img{max-width:120px;max-height:90px;border-radius:6px;border:1px solid var(--line);background:#fff}
+.imgfld input[type=file]{position:absolute;width:1px;height:1px;opacity:0;padding:0;border:0}
+.imgfld input[type=file]:focus-visible+button,.imgfld label.filebtn:focus-within{outline:2px solid var(--accent)}
+.fld label.filebtn{text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink);font-weight:600;cursor:pointer}
+.big-body{display:flex;flex-wrap:wrap;gap:clamp(14px,3vw,36px);align-items:flex-start}
+.big-body .big-desc{flex:1 1 320px}
+.big-img{max-height:42vh;max-width:min(100%,46vw);border-radius:12px;background:#fff}
+@media (max-width:700px){.big-img{max-width:100%;max-height:30vh}}
+
 /* Guía */
 .subnav{display:flex;flex-wrap:wrap;gap:6px}
 .sub{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:14px;cursor:pointer;color:var(--muted)}
@@ -446,6 +460,6 @@ details.g-det .in{padding:4px 16px 16px;display:grid;gap:12px}
 <div id="big" hidden role="dialog" aria-label="Sesión en pantalla grande"></div>
 <div class="toast" id="toast" hidden></div>
 
-<script type="module" src="app.js?v=6"></script>
+<script type="module" src="app.js?v=7"></script>
 </body>
 </html>
