@@ -56,7 +56,7 @@ const pname=id=>{if(!id)return'Alguien';if(me&&id===me.uid)return'Vos';const m=m
 const COLORS=['#1E6A44','#2563A8','#8A4FB0','#B5482A','#7A6A12','#0F7B7B','#A33B6B','#4B5BA6'];
 const avatar=id=>{const m=members[id]||{};const n=(m.name||m.email||'?').trim();const ini=n.split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();let h=0;for(const c of String(id||n))h=(h*31+c.charCodeAt(0))>>>0;return `<span class="av" style="background:${COLORS[h%COLORS.length]}" aria-hidden="true">${esc(ini)}</span>`};
 const isNum=v=>v!==''&&v!=null&&!isNaN(v);
-const load=s=>{const d=sessDuration(s);return (isNum(s.rpe)&&d)?Math.round(s.rpe*d):null};
+const load=s=>{if(s.cancel)return null;const d=sessDuration(s);return (isNum(s.rpe)&&d)?Math.round(s.rpe*d):null};
 const byDateDesc=(a,b)=>(b.date||'').localeCompare(a.date||'')||(b.at||'').localeCompare(a.at||'');
 const activeInj=()=>S.injuries.filter(i=>i.status!=='Alta');
 const ST_CL={Suspendido:'warn','Con permiso':'acc',Enfermo:'amber'};
@@ -78,10 +78,10 @@ const attMap=s=>{if(s.att&&typeof s.att==='object')return s.att;if(Array.isArray
 const hasAtt=s=>{const m=attMap(s);return !!(m&&Object.keys(m).length)};
 function attStats(pid,sessions){
  const c={P:0,T:0,JE:0,JT:0,JS:0,JO:0,I:0,L:0,n:0};
- sessions.forEach(s=>{const m=attMap(s);if(!m||!m[pid])return;c[m[pid]]=(c[m[pid]]||0)+1;c.n++});
+ sessions.forEach(s=>{if(s.cancel)return;const m=attMap(s);if(!m||!m[pid])return;c[m[pid]]=(c[m[pid]]||0)+1;c.n++});
  const base=c.n-c.L;c.pct=base>0?Math.round((c.P+c.T)/base*100):null;return c;
 }
-function sessGroupPct(s){const m=attMap(s);if(!m)return null;const v=Object.values(m);const base=v.filter(x=>x!=='L').length;if(!base)return null;return v.filter(x=>x==='P'||x==='T').length/base}
+function sessGroupPct(s){if(s.cancel)return null;const m=attMap(s);if(!m)return null;const v=Object.values(m);const base=v.filter(x=>x!=='L').length;if(!base)return null;return v.filter(x=>x==='P'||x==='T').length/base}
 const inLastDays=(d,n)=>{const t=today();return d&&daysBetween(d,t)>=0&&daysBetween(d,t)<n};
 
 /* planificación */
@@ -92,7 +92,8 @@ const mesoOf=d=>sortStart(S.mesos).find(m=>inRange(d,m));
 const microNum=m=>m?sortStart(S.micros).findIndex(x=>x.id===m.id)+1:0;
 const mesoNum=m=>m?sortStart(S.mesos).findIndex(x=>x.id===m.id)+1:0;
 const sessOrder=()=>[...S.sessions].sort((a,b)=>((a.date||'')+(a.time||'')).localeCompare((b.date||'')+(b.time||''))||(a.at||'').localeCompare(b.at||''));
-const sessNums=()=>{const m={};sessOrder().forEach((s,i)=>m[s.id]=i+1);return m};
+const sessNums=()=>{const m={};sessOrder().filter(s=>!s.cancel).forEach((s,i)=>m[s.id]=i+1);return m};
+const sNo=(NUM,s)=>s.cancel?'Suspendida':'N° '+NUM[s.id];
 const sessTasks=s=>(Array.isArray(s.tasks)?s.tasks:[]).filter(t=>t&&t.name);
 const sessDuration=s=>{if(isNum(s.duration))return +s.duration;const t=sessTasks(s).reduce((a,x)=>a+(isNum(x.time)?+x.time:0),0);return t||null};
 const isGym=r=>r.kind==='Gimnasio';
@@ -387,8 +388,8 @@ function weekLoads(n=6){
 const isGK=p=>/arquer/i.test(p.position||'');
 function pendings(NUM){
  const t=today(),out=[];const sd=s=>`${DOW[parse(s.date).getDay()]} ${fd(s.date)}`;
- sessOrder().filter(s=>s.date&&s.date<t&&daysBetween(s.date,t)<=14&&!hasAtt(s)).forEach(s=>out.push({txt:`Falta la asistencia de la sesión N° ${NUM[s.id]} (${esc(s.type||'Sesión')} del ${sd(s)})`,act:'att',id:s.id,btn:'Tomar asistencia'}));
- const lastS=sessOrder().filter(s=>s.date&&s.date<t&&daysBetween(s.date,t)<=7).pop();
+ sessOrder().filter(s=>s.date&&s.date<t&&daysBetween(s.date,t)<=14&&!hasAtt(s)&&!s.cancel).forEach(s=>out.push({txt:`Falta la asistencia de la sesión N° ${NUM[s.id]} (${esc(s.type||'Sesión')} del ${sd(s)})`,act:'att',id:s.id,btn:'Tomar asistencia'}));
+ const lastS=sessOrder().filter(s=>s.date&&s.date<t&&daysBetween(s.date,t)<=7&&!s.cancel).pop();
  if(lastS){
   const got=rpesOf(lastS.date).filter(c=>c.activity!=='Gimnasio');
   if(S.checkins.length){
@@ -412,14 +413,14 @@ function vResumen(){
  const next=nextMatch();
  const last=[...S.matches].filter(m=>isNum(m.gf)&&isNum(m.ga)).sort(byDateDesc)[0];
  const todayS=sessOrder().filter(s=>s.date===t);
- const lastS=sessOrder().filter(s=>s.date<t).pop();
- const nextS=sessOrder().find(s=>s.date>t);
+ const lastS=sessOrder().filter(s=>s.date<t&&!s.cancel).pop();
+ const nextS=sessOrder().find(s=>s.date>t&&!s.cancel);
  const att=wk.map(sessGroupPct).filter(x=>x!=null);
  const attPct=att.length?Math.round(att.reduce((a,b)=>a+b,0)/att.length*100):null;
  const NUM=sessNums();
  const trend=prev?Math.round((wkLoad-prev)/prev*100):null;
  const bds=birthdays();const bdToday=bds.filter(b=>b.n===0);
- const sessBtns=s=>`<div class="tools"><button class="btn sm" type="button" data-act="sheet" data-id="${s.id}">Hoja de sesión</button><button class="btn sm" type="button" data-act="big" data-id="${s.id}">Pantalla grande</button><button class="btn sm" type="button" data-act="att" data-id="${s.id}">Asistencia</button></div>`;
+ const sessBtns=(s,td)=>`<div class="tools"><button class="btn sm" type="button" data-act="sheet" data-id="${s.id}">Hoja de sesión</button><button class="btn sm" type="button" data-act="big" data-id="${s.id}">Pantalla grande</button><button class="btn sm" type="button" data-act="att" data-id="${s.id}">Asistencia</button>${td?`<button class="btn ghost sm" type="button" data-act="smove" data-id="${s.id}">Pasar de día</button><button class="btn ghost sm" type="button" data-act="scx" data-id="${s.id}">Suspender</button>`:''}</div>`;
  let h=`<div class="bar"><div><h2>Resumen</h2><p>Estado del plantel al ${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}.</p></div></div>`;
  if(!n)h+=empty('Empecemos por el plantel','Cargá los jugadores primero. Después vas a poder registrar asistencia, tests, lesiones y convocatorias para cada uno.','players','Agregar jugador');
  /* hoy toca */
@@ -430,7 +431,7 @@ function vResumen(){
   else if(!e.train){title=e.rest?'Día libre después del partido':'Sin entrenamiento'}
   else{title=esc(i?i.t:'Entrenamiento')+(e.last?' + previa del partido':'');goal=i?esc(i.goal):''}
   const matchLine=next?(dTo===0?`Hoy${next.time?' a las '+esc(next.time)+' h':''} · ${esc(next.venue||'')}`:`${dTo===1?'Mañana':'Faltan '+dTo+' días para'} el partido vs <b>${esc(next.rival)}</b> (${DOW[parse(next.date).getDay()]} ${fd(next.date)}${next.time?' · '+esc(next.time)+' h':''})`):'No hay partidos próximos cargados.';
-  const btns=todayS.length?todayS.map(s=>`<div class="today-s"><span><span class="eyebrow">Sesión de hoy · N° ${NUM[s.id]}</span><br><b>${esc(s.type||'Sesión')}</b>${s.time?' · '+esc(s.time)+' h':''}${s.focus?' · '+esc(s.focus):''}</span>${sessBtns(s)}</div>`).join(''):e.train&&!e.trans?`<div class="tools"><button class="btn primary sm" type="button" data-act="todaytpl">Crear la sesión de hoy desde la guía</button></div>`:'';
+  const btns=todayS.length?todayS.map(s=>s.cancel?`<div class="today-s"><span><span class="eyebrow">Sesión de hoy · Suspendida</span><br><b class="cx-t">${esc(s.type||'Sesión')}</b>${s.time?' · '+esc(s.time)+' h':''} · ${esc(cxLong(s.cancel))}${s.cancelNote?' · '+esc(s.cancelNote):''}</span><div class="tools"><button class="btn sm" type="button" data-act="cxundo" data-id="${s.id}">Reactivar</button></div></div>`:`<div class="today-s"><span><span class="eyebrow">Sesión de hoy · N° ${NUM[s.id]}</span><br><b>${esc(s.type||'Sesión')}</b>${s.time?' · '+esc(s.time)+' h':''}${s.focus?' · '+esc(s.focus):''}</span>${sessBtns(s,1)}</div>`).join(''):e.train&&!e.trans?`<div class="tools"><button class="btn primary sm" type="button" data-act="todaytpl">Crear la sesión de hoy desde la guía</button></div>`:'';
   h+=`<div class="panel today"><div class="body"><div class="today-top"><span class="eyebrow">Hoy toca · ${DOWL[e.wd]}</span>${e.code&&!e.trans?mdPill(e):''}</div><div class="today-t">${title}</div>${goal?`<div class="today-g">${goal}</div>`:''}<div class="today-m">${matchLine}</div>${bdToday.length?`<div class="today-bd">Hoy ${plural(bdToday.length,'cumple','cumplen')} años: <b>${bdToday.map(b=>esc(b.p.name)).join(', ')}</b></div>`:''}${btns}</div></div>`;}
  /* pendientes */
  {const P=n?pendings(NUM):[];
@@ -463,26 +464,30 @@ function feed(max=14){
  const E={players:'editó a',sessions:'editó la sesión',tests:'editó un test de',injuries:'actualizó la lesión de',routines:'editó la rutina',matches:'editó el partido vs',mesos:'editó el mesociclo',micros:'editó el microciclo del',gymlogs:'editó el gimnasio de'};
  const items=[];COLS.filter(c=>L[c]).forEach(c=>S[c].forEach(d=>{const ed=!!d.editAt;const when=d.editAt||d.at;if(!when)return;
   const obj=c==='players'||c==='routines'||c==='mesos'?d.name:c==='tests'||c==='injuries'||c==='gymlogs'?plName(d.player):c==='matches'?d.rival:c==='micros'?fd(d.start):(d.type||'')+' del '+fd(d.date);
-  items.push({when,by:d.editBy||d.by,txt:(ed?E:L)[c],obj})}));
+  items.push({when,by:d.editBy||d.by,txt:c==='sessions'&&d.cancel&&d.cancelAt===when?'suspendió la sesión':c==='sessions'&&d.movedAt&&d.movedAt===when?'pasó de día la sesión':(ed?E:L)[c],obj})}));
  items.sort((a,b)=>b.when.localeCompare(a.when));
  if(!items.length)return`<p style="margin:0;color:var(--muted)">Acá vas a ver quién cargó o cambió cada dato.</p>`;
  return `<div class="feed">${items.slice(0,max).map(i=>`<div class="it">${avatar(i.by)}<div><b>${esc(pname(i.by))}</b> ${i.txt} <b>${esc(i.obj||'')}</b><div class="when">${ago(i.when)}</div></div></div>`).join('')}</div>${items.length>5&&max<=5?`<button class="btn sm" type="button" data-act="feedall" style="margin-top:10px">Ver todo</button>`:max>5&&tab==='resumen'?`<button class="btn sm" type="button" data-act="feedall" style="margin-top:10px">Ver menos</button>`:''}`;
 }
 function attPctFor(id){return attStats(id,S.sessions.filter(s=>inLastDays(s.date,30))).pct}
 function sessRow(s,NUM){
+ if(s.cancel)return `<div class="row r-std click cx" data-act="sheet" data-id="${s.id}">${dateCell(s.date)}<div class="main"><div class="t"><span class="pill">Suspendida</span> <span class="cx-t">${esc(s.type||'Sesión')}</span>${s.time?` <span class="mono" style="color:var(--muted);font-weight:400">${esc(s.time)}</span>`:''}</div><div class="m"><span>${esc(cxLong(s.cancel))}</span>${s.cancelNote?`<span>${esc(s.cancelNote)}</span>`:''}<span>Suspendida por ${esc(pname(s.cancelBy))} · ${ago(s.cancelAt)}</span></div></div>
+ <div class="side"><div class="acts"><button class="btn ghost sm" type="button" data-act="cxundo" data-id="${s.id}">Reactivar</button></div></div></div>`;
  const L=load(s);const m=attMap(s);const v=m?Object.values(m):[];const pres=v.filter(x=>x==='P'||x==='T').length;const mc=microOf(s.date);const dur=sessDuration(s);const nt=sessTasks(s).length;
- return `<div class="row r-std click" data-act="sheet" data-id="${s.id}">${dateCell(s.date)}<div class="main"><div class="t"><span class="snum">N° ${NUM[s.id]}</span> ${esc(s.type||'Sesión')}${s.time?` <span class="mono" style="color:var(--muted);font-weight:400">${esc(s.time)}</span>`:''}</div><div class="m">${s.focus?`<span>${esc(s.focus)}</span>`:''}${mc?`<span>MC ${microNum(mc)}${mc.type?' · '+esc(mc.type):''}</span>`:''}${nt?`<span>${nt} tarea${nt>1?'s':''}</span>`:''}${byline(s)}</div></div>
+ return `<div class="row r-std click" data-act="sheet" data-id="${s.id}">${dateCell(s.date)}<div class="main"><div class="t"><span class="snum">N° ${NUM[s.id]}</span> ${esc(s.type||'Sesión')}${s.time?` <span class="mono" style="color:var(--muted);font-weight:400">${esc(s.time)}</span>`:''}</div><div class="m">${s.focus?`<span>${esc(s.focus)}</span>`:''}${mc?`<span>MC ${microNum(mc)}${mc.type?' · '+esc(mc.type):''}</span>`:''}${nt?`<span>${nt} tarea${nt>1?'s':''}</span>`:''}${s.movedFrom?`<span>Pasada del ${DOW[parse(s.movedFrom).getDay()]} ${fd(s.movedFrom)}</span>`:''}${byline(s)}</div></div>
  <div class="side"><div class="figs">${dur?`<div class="fig"><div class="n">${dur}</div><div class="l">min</div></div>`:''}${isNum(s.rpe)?`<div class="fig"><div class="n">${+s.rpe}</div><div class="l">RPE</div></div>`:''}${L!=null?`<div class="fig"><div class="n">${L}</div><div class="l">UA</div></div>`:''}${v.length?`<div class="fig"><div class="n">${pres}/${v.length}</div><div class="l">presentes</div></div>`:''}</div>
  <div class="acts"><button class="btn ghost sm" type="button" data-act="att" data-id="${s.id}">Asistencia</button><button class="btn ghost sm" type="button" data-act="big" data-id="${s.id}">Pantalla grande</button></div></div></div>`;
 }
 function vSessions(){
  const t=today();const NUM=sessNums();
- const h=`<div class="bar"><div><h2>Sesiones</h2><p>Tocá una sesión para ver la hoja, descargarla o editarla. Carga = RPE × minutos (UA).</p></div><div class="tools">${addBtn('sessions','Sesión')}</div></div>`;
+ const h=`<div class="bar"><div><h2>Sesiones</h2><p>Tocá una sesión para ver la hoja, descargarla, editarla, pasarla a otro día o suspenderla. Carga = RPE × minutos (UA).</p></div><div class="tools">${addBtn('sessions','Sesión')}</div></div>`;
  if(!S.sessions.length)return h+empty('Sin sesiones cargadas','Planificá la sesión con objetivos, materiales y tareas. El día del entrenamiento la proyectás en pantalla grande y después tomás asistencia.','sessions','Crear sesión');
- const next=sessOrder().filter(s=>s.date>=t&&!hasAtt(s));
- const past=sessOrder().filter(s=>!(s.date>=t&&!hasAtt(s))).reverse();
+ const next=sessOrder().filter(s=>s.date>=t&&!hasAtt(s)&&!s.cancel);
+ const past=sessOrder().filter(s=>!(s.date>=t&&!hasAtt(s))&&!s.cancel).reverse();
+ const cx=sessOrder().filter(s=>s.cancel).reverse();
  return h+(next.length?`<div class="panel"><h3>Próximas <small>${next.length}</small></h3><div class="list" style="border:0;border-radius:0 0 12px 12px">${next.map(s=>sessRow(s,NUM)).join('')}</div></div>`:'')
-  +(past.length?`<div class="panel"><h3>Realizadas <small>${past.length}</small></h3><div class="list" style="border:0;border-radius:0 0 12px 12px">${past.map(s=>sessRow(s,NUM)).join('')}</div></div>`:'');
+  +(past.length?`<div class="panel"><h3>Realizadas <small>${past.length}</small></h3><div class="list" style="border:0;border-radius:0 0 12px 12px">${past.map(s=>sessRow(s,NUM)).join('')}</div></div>`:'')
+  +(cx.length?`<details class="panel cx-panel"><summary><h3>Suspendidas <small>${cx.length}</small></h3></summary><div class="list" style="border:0;border-radius:0 0 12px 12px">${cx.map(s=>sessRow(s,NUM)).join('')}</div></details>`:'');
 }
 function vTests(){
  const types=[...new Set(S.tests.map(t=>t.test).filter(Boolean))].sort();
@@ -735,7 +740,7 @@ function openForm(key,id,o={}){
   if(key==='mesos'){defs.start=today();defs.end=addDays(today(),27)}
   if(key==='micros'){const last=sortStart(S.micros).pop();const st=o.date||(last&&last.end?addDays(last.end,1):today());defs.start=st;const nm=S.matches.map(m=>m.date).filter(d=>d&&d>st&&daysBetween(st,d)<=10).sort()[0];defs.end=nm||addDays(st,6)}
   if(o.tpl){Object.assign(defs,o.tpl);defs.time=gset().time}
-  if(src){Object.assign(defs,src);['date','att','attendance','rpe','shareId','id','by','at','editBy','editAt'].forEach(k=>delete defs[k]);defs.date=o.date||today()}
+  if(src){Object.assign(defs,src);['date','att','attendance','rpe','shareId','id','by','at','editBy','editAt','cancel','cancelNote','cancelBy','cancelAt','movedFrom','movedAt'].forEach(k=>delete defs[k]);defs.date=o.date||today()}
  }
  $('#mTitle').textContent=(id?'Editar ':o.copy?'Duplicar ':/^(sesión|medición|lesión|rutina)/.test(sc.one)?'Nueva ':'Nuevo ')+sc.one;
  $('#mBody').innerHTML=`<form class="form" id="frm" novalidate>${sc.fields.map(f=>{let v=d?d[f.k]:(f.k in defs?defs[f.k]:(f.def==='today'?today():''));return fieldHTML(f,v??'')}).join('')}
@@ -800,10 +805,11 @@ function microDays(c){const out=[];if(!c.start||!c.end)return out;for(let d=c.st
 function dayGrid(c,NUM){
  const t=today();
  return `<div class="mdays">${microDays(c).map(d=>{const code=mdCode(d);const ss=sessOrder().filter(s=>s.date===d);const m=S.matches.find(x=>x.date===d);
-  return `<div class="md-day${d===t?' today':''}${m?' match':''}"><div class="md-h"><b>${DOW[parse(d).getDay()]}</b><span class="num">${fd(d)}</span>${code?`<span class="pill ${code==='MD'?'warn':code.startsWith('MD+')?'':'acc'}">${code}</span>`:''}</div>
+  const act=ss.filter(s=>!s.cancel);
+  return `<div class="md-day${d===t?' today':''}${m?' match':''}${ss.length&&!act.length?' off':''}"><div class="md-h"><b>${DOW[parse(d).getDay()]}</b><span class="num">${fd(d)}</span>${code?`<span class="pill ${code==='MD'?'warn':code.startsWith('MD+')?'':'acc'}">${code}</span>`:''}</div>
   ${m?`<div class="md-m">vs ${esc(m.rival)}${m.time?' · '+esc(m.time)+' h':''}</div>`:''}
-  ${ss.map(s=>`<button class="chip" type="button" data-act="sheet" data-id="${s.id}"><b>N° ${NUM[s.id]}</b>${esc(s.type||'Sesión')}${hasAtt(s)?' ✓':''}</button>`).join('')}
-  ${!m&&!ss.length?`<button class="chip add" type="button" data-act="add" data-col="sessions" data-date="${d}" aria-label="Agregar sesión el ${fd(d)}">+ Sesión</button>`:''}</div>`}).join('')}</div>`;
+  ${ss.map(s=>s.cancel?`<button class="chip cx" type="button" data-act="sheet" data-id="${s.id}"><b>Suspendida</b><span class="cx-t">${esc(s.type||'Sesión')}</span> · ${esc(cxShort(s))}</button>`:`<button class="chip" type="button" data-act="sheet" data-id="${s.id}"><b>N° ${NUM[s.id]}</b>${esc(s.type||'Sesión')}${hasAtt(s)?' ✓':''}</button>`).join('')}
+  ${!m&&!act.length?`<button class="chip add" type="button" data-act="add" data-col="sessions" data-date="${d}" aria-label="Agregar sesión el ${fd(d)}">+ Sesión</button>`:''}</div>`}).join('')}</div>`;
 }
 function loadCmp(c,avg){
  const ld=microLoad(c),real=loadLevel(ld,avg);if(!c.plannedLoad&&!ld)return '';
@@ -830,13 +836,13 @@ function vPlan(){
  const ms=sortStart(S.mesos), mcs=sortStart(S.micros);
  if(!ms.length&&!mcs.length)return h+`<div class="empty"><strong>Armá la temporada</strong><p>Empezá por un mesociclo (por ejemplo, la pretemporada) y dividilo en microciclos de partido a partido. Después creá las sesiones de cada microciclo.</p><div class="tools" style="justify-content:center"><button class="btn primary" type="button" data-act="gyear">Armar la temporada con la guía</button><button class="btn" type="button" data-act="planadd">+ Agregar</button></div></div>`;
  const NUM=sessNums(),t=today(),avg=loadAvg();
- const microBlock=c=>{const ss=S.sessions.filter(s=>inRange(s.date,c));const ld=microLoad(c);const cur=inRange(t,c);const mm=microMatches(c);
+ const microBlock=c=>{const all=S.sessions.filter(s=>inRange(s.date,c));const ss=all.filter(s=>!s.cancel);const ncx=all.length-ss.length;const ld=microLoad(c);const cur=inRange(t,c);const mm=microMatches(c);
   const matchTxt=mm.length?mm.map(m=>`vs ${esc(m.rival)}${m.venue?' ('+esc(m.venue.toLowerCase())+')':''} · ${DOW[parse(m.date).getDay()]} ${fd(m.date)}`).join(' · '):c.match?esc(c.match):'';
   const lc=loadCmp(c,avg);
   return `<div class="mc click${cur?' cur':''}" data-act="micro" data-id="${c.id}"><div class="k">MC ${microNum(c)}<small>${fd(c.start)}–${fd(c.end)}</small>${cur?'<span class="pill acc">Esta semana</span>':''}</div>
   <div class="main" style="min-width:0"><div class="t" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${c.type?`<span class="pill acc">${esc(c.type)}</span>`:''}${matchTxt?`<span style="font-weight:600">${matchTxt}</span>`:''}</div>${c.focus?`<div style="font-size:14px;margin-top:2px">${esc(c.focus)}</div>`:''}
   ${dayGrid(c,NUM)}
-  <div class="mc-foot">${ss.length} sesi${ss.length===1?'ón':'ones'}${ld?` · carga ${ld.toLocaleString('es-AR')} (RPE × min)`:''}${lc?`<span class="mc-load">${lc}</span>`:''}</div></div></div>`};
+  <div class="mc-foot">${ss.length} sesi${ss.length===1?'ón':'ones'}${ncx?` · <span class="cx-n">${ncx} ${plural(ncx,'suspendida','suspendidas')}</span>`:''}${ld?` · carga ${ld.toLocaleString('es-AR')} (RPE × min)`:''}${lc?`<span class="mc-load">${lc}</span>`:''}</div></div></div>`};
  let out=h+seasonBar();
  ms.forEach(m=>{const own=mcs.filter(c=>inRange(c.start,m));const weeks=Math.round((daysBetween(m.start,m.end)+1)/7);const past=m.end<t;const cur=inRange(t,m);
   out+=`<details class="panel meso" id="meso-${m.id}" ${past?'':'open'}><summary class="meso-head"><div class="ttl"><div><div class="eyebrow">Mesociclo ${mesoNum(m)}${m.phase?' · '+esc(m.phase):''}${cur?' · en curso':past?' · terminado':''}</div><h4>${esc(m.name)}</h4><div class="mono" style="font-size:13px;color:var(--muted)">${fdy(m.start)} – ${fdy(m.end)} · ${weeks} semana${weeks!==1?'s':''} · ${own.length} microciclo${own.length!==1?'s':''}</div></div><button class="btn ghost sm" type="button" data-act="meso" data-id="${m.id}">Opciones</button></div>${m.objective?`<div style="white-space:pre-wrap;font-size:14px">${esc(m.objective)}</div>`:''}</summary>
@@ -853,7 +859,7 @@ function openPlanAdd(){
  showModal();
 }
 function openMeso(id){
- const m=S.mesos.find(x=>x.id===id);if(!m)return;const own=S.micros.filter(c=>inRange(c.start,m));const ld=own.reduce((a,c)=>a+microLoad(c),0);const ss=S.sessions.filter(s=>inRange(s.date,m)).length;
+ const m=S.mesos.find(x=>x.id===id);if(!m)return;const own=S.micros.filter(c=>inRange(c.start,m));const ld=own.reduce((a,c)=>a+microLoad(c),0);const ss=S.sessions.filter(s=>inRange(s.date,m)&&!s.cancel).length;
  $('#mTitle').textContent='Mesociclo '+mesoNum(m);
  $('#mBody').innerHTML=`<div class="det-sec" style="margin-top:0"><div style="font-family:var(--f-display);font-size:26px;font-weight:700;text-transform:uppercase;line-height:1.05">${esc(m.name)}</div><div class="mini" style="margin-top:10px">${[['Etapa',m.phase],['Fechas',fdy(m.start)+' – '+fdy(m.end)],['Microciclos',String(own.length)],['Sesiones',String(ss)],['Carga total',ld?ld.toLocaleString('es-AR')+' (RPE × min)':'']].filter(x=>x[1]).map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span>${esc(f[1])}</span></div>`).join('')}</div></div>
  ${m.objective?`<div class="det-sec"><h4>Objetivos</h4><div style="white-space:pre-wrap">${esc(m.objective)}</div></div>`:''}${m.notes?`<div class="det-sec"><h4>Notas</h4><div style="white-space:pre-wrap">${esc(m.notes)}</div></div>`:''}
@@ -876,11 +882,11 @@ function openMicro(id){
 function copyMicro(btn){
  const c=S.micros.find(x=>x.id===btn.dataset.id);if(!c)return;const nx=nextMicro(c);
  if(!nx){toast('No hay un microciclo siguiente: crealo primero.');return}
- const src=sessOrder().filter(s=>inRange(s.date,c));if(!src.length){toast('Este microciclo no tiene sesiones para copiar.');return}
- const have=S.sessions.filter(s=>inRange(s.date,nx)).length;
+ const src=sessOrder().filter(s=>inRange(s.date,c)&&!s.cancel);if(!src.length){toast('Este microciclo no tiene sesiones para copiar.');return}
+ const have=S.sessions.filter(s=>inRange(s.date,nx)&&!s.cancel).length;
  if(have&&!btn.classList.contains('armed')){btn.classList.add('armed');btn.textContent=`El siguiente ya tiene ${have}. ¿Copiar igual?`;setTimeout(()=>{btn.classList.remove('armed');btn.textContent='Copiar al siguiente'},5000);return}
  const off=daysBetween(c.start,nx.start),now=new Date().toISOString();let n=0;
- src.forEach(s=>{const d=addDays(s.date,off);if(d>nx.end)return;const body={...s,date:d,squad:s.squad||sq(),by:me.uid,at:now};['id','att','attendance','rpe','shareId','editBy','editAt'].forEach(k=>delete body[k]);setDoc(doc(collection(db,'sessions')),body).catch(err=>toast(errMsg(err)));n++});
+ src.forEach(s=>{const d=addDays(s.date,off);if(d>nx.end)return;const body={...s,date:d,squad:s.squad||sq(),by:me.uid,at:now};['id','att','attendance','rpe','shareId','editBy','editAt','cancel','cancelNote','cancelBy','cancelAt','movedFrom','movedAt'].forEach(k=>delete body[k]);setDoc(doc(collection(db,'sessions')),body).catch(err=>toast(errMsg(err)));n++});
  closeModal();toast(`${n} ${plural(n,'sesión copiada','sesiones copiadas')} al microciclo ${microNum(nx)}`);
 }
 function microSheetData(c){const NUM=sessNums();return microDays(c).map(d=>{const code=mdCode(d);const ss=sessOrder().filter(s=>s.date===d);const m=S.matches.find(x=>x.date===d);return {d,code,ss,m,NUM}})}
@@ -891,8 +897,8 @@ function openMicroSheet(id){
  <div class="sh-meta">${meta.map(m=>`<div><span class="k">${m[0]}</span><b>${esc(m[1])}</b></div>`).join('')}</div>
  ${c.focus?`<div class="sh-sec"><h4>Objetivo</h4><p style="margin:0">${esc(c.focus)}</p></div>`:''}
  ${areas.length?`<div class="sh-sec"><h4>Objetivos por área</h4><div class="sh-areas">${areas.map(a=>`<div><span class="k">${a[1]}</span><div style="white-space:pre-wrap">${esc(c[a[0]])}</div></div>`).join('')}</div></div>`:''}
- <div class="sh-sec"><h4>Día por día</h4><div class="tablewrap sh-table"><table><thead><tr><th>Día</th><th></th><th>Hora</th><th>Sesión</th><th class="r">Min</th></tr></thead><tbody>${rows.map(r=>r.m?`<tr class="sh-match"><td><b>${DOW[parse(r.d).getDay()]} ${fd(r.d)}</b></td><td>MD</td><td class="num">${esc(r.m.time||'')}</td><td colspan="2"><b>Partido vs ${esc(r.m.rival)}</b>${r.m.venue?' · '+esc(r.m.venue):''}</td></tr>`:r.ss.length?r.ss.map((s,i)=>`<tr><td>${i?'':`<b>${DOW[parse(r.d).getDay()]} ${fd(r.d)}</b>`}</td><td>${i?'':esc(r.code)}</td><td class="num">${esc(s.time||'')}</td><td><b>N° ${r.NUM[s.id]} · ${esc(s.type||'Sesión')}</b>${s.focus?`<div style="color:var(--muted)">${esc(s.focus)}</div>`:''}</td><td class="r num">${sessDuration(s)||''}</td></tr>`).join(''):`<tr><td><b>${DOW[parse(r.d).getDay()]} ${fd(r.d)}</b></td><td>${esc(r.code)}</td><td></td><td style="color:var(--muted)">Libre</td><td></td></tr>`).join('')}</tbody></table></div></div>`;
- const txt=[`Microciclo ${microNum(c)} (${fd(c.start)} al ${fd(c.end)})${c.focus?'\n'+c.focus:''}`,...rows.map(r=>`${DOW[parse(r.d).getDay()]} ${fd(r.d)}${r.code?' · '+r.code:''}: `+(r.m?`Partido vs ${r.m.rival}${r.m.time?' '+r.m.time+' h':''}`:r.ss.length?r.ss.map(s=>`${s.time?s.time+' h ':''}${s.type||'Sesión'}${s.focus?' ('+s.focus+')':''}`).join(' / '):'Libre'))].join('\n');
+ <div class="sh-sec"><h4>Día por día</h4><div class="tablewrap sh-table"><table><thead><tr><th>Día</th><th></th><th>Hora</th><th>Sesión</th><th class="r">Min</th></tr></thead><tbody>${rows.map(r=>r.m?`<tr class="sh-match"><td><b>${DOW[parse(r.d).getDay()]} ${fd(r.d)}</b></td><td>MD</td><td class="num">${esc(r.m.time||'')}</td><td colspan="2"><b>Partido vs ${esc(r.m.rival)}</b>${r.m.venue?' · '+esc(r.m.venue):''}</td></tr>`:r.ss.length?r.ss.map((s,i)=>`<tr><td>${i?'':`<b>${DOW[parse(r.d).getDay()]} ${fd(r.d)}</b>`}</td><td>${i?'':esc(r.code)}</td><td class="num">${esc(s.time||'')}</td><td>${s.cancel?`<b>Suspendida</b> · <s>${esc(s.type||'Sesión')}</s> (${esc(cxShort(s).toLowerCase())})`:`<b>N° ${r.NUM[s.id]} · ${esc(s.type||'Sesión')}</b>`}${!s.cancel&&s.focus?`<div style="color:var(--muted)">${esc(s.focus)}</div>`:''}</td><td class="r num">${sessDuration(s)||''}</td></tr>`).join(''):`<tr><td><b>${DOW[parse(r.d).getDay()]} ${fd(r.d)}</b></td><td>${esc(r.code)}</td><td></td><td style="color:var(--muted)">Libre</td><td></td></tr>`).join('')}</tbody></table></div></div>`;
+ const txt=[`Microciclo ${microNum(c)} (${fd(c.start)} al ${fd(c.end)})${c.focus?'\n'+c.focus:''}`,...rows.map(r=>`${DOW[parse(r.d).getDay()]} ${fd(r.d)}${r.code?' · '+r.code:''}: `+(r.m?`Partido vs ${r.m.rival}${r.m.time?' '+r.m.time+' h':''}`:r.ss.length?r.ss.map(s=>s.cancel?`${s.type||'Sesión'} (suspendida)`:`${s.time?s.time+' h ':''}${s.type||'Sesión'}${s.focus?' ('+s.focus+')':''}`).join(' / '):'Libre'))].join('\n');
  openDoc(html,`<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools"><a class="btn primary" href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">Enviar por WhatsApp</a><button class="btn" type="button" data-act="print">Descargar PDF</button></div></div>`);
 }
 
@@ -1243,22 +1249,26 @@ function libPickOpts(pat){const all=libAll().filter(e=>e.pattern===pat);return l
 
 /* ---------- asistencia ---------- */
 
-function attSessions(){const t=today();return S.sessions.filter(s=>{if(!hasAtt(s))return false;if(attRange==='30')return inLastDays(s.date,30);if(attRange==='mes')return s.date&&s.date.slice(0,7)===t.slice(0,7);if(attRange==='micro'){const m=microOf(t);return m?inRange(s.date,m):false}return true})}
+function inAttRange(s){const t=today();{if(attRange==='30')return inLastDays(s.date,30);if(attRange==='mes')return s.date&&s.date.slice(0,7)===t.slice(0,7);if(attRange==='micro'){const m=microOf(t);return m?inRange(s.date,m):false}return true}}
+const attSessions=()=>S.sessions.filter(s=>!s.cancel&&hasAtt(s)&&inAttRange(s));
+function cxLine(){const L=S.sessions.filter(s=>s.cancel&&inAttRange(s));if(!L.length)return '';const g={};L.forEach(s=>{g[s.cancel]=(g[s.cancel]||0)+1});
+ return `<p class="cx-line">Sesiones suspendidas en el período: <b>${L.length}</b> (${CX.filter(c=>g[c[0]]).map(c=>g[c[0]]+' '+c[3]).join(', ')}). <button class="linkbtn" type="button" data-act="tab" data-k="sessions">Ver</button></p>`}
 function vAtt(){
  const opt=(v,l)=>`<option value="${v}" ${attRange===v?'selected':''}>${l}</option>`;
  const h=`<div class="bar"><div><h2>Asistencia</h2><p>Se carga desde cada sesión con el botón Asistencia. El % no cuenta los días de lesión.</p></div><div class="tools"><select class="flt" id="attRange" aria-label="Período">${opt('30','Últimos 30 días')}${opt('mes','Este mes')}${opt('micro','Microciclo actual')}${opt('todo','Toda la temporada')}</select></div></div>`;
  if(!S.players.length)return h+empty('Sin jugadores','Cargá el plantel para empezar a tomar asistencia.','players','Agregar jugador');
  const ss=attSessions();
- if(!ss.length)return h+`<div class="empty"><strong>Sin asistencias en este período</strong><p>Abrí una sesión y tocá <b>Asistencia</b> para marcar presentes, tardes, justificadas e injustificadas.</p></div>`;
+ if(!ss.length)return h+cxLine()+`<div class="empty"><strong>Sin asistencias en este período</strong><p>Abrí una sesión y tocá <b>Asistencia</b> para marcar presentes, tardes, justificadas e injustificadas.</p></div>`;
  const rows=sortedPlayers().map(p=>({p,c:attStats(p.id,ss)})).sort((a,b)=>(a.c.pct??101)-(b.c.pct??101));
  const cell=v=>v?`<td class="r num">${v}</td>`:`<td class="r num" style="color:var(--muted)">–</td>`;
  return h+`<div class="att-sum">${ATT.map(a=>`<span class="pill ${a[2]}">${a[1]}</span>`).join('')}</div>
  <div class="tablewrap"><table><thead><tr><th>Jugador</th><th class="r">Ses.</th><th class="r">Pres.</th><th class="r">Tarde</th><th class="r">Enf.</th><th class="r">Trab.</th><th class="r">Est.</th><th class="r">Otra</th><th class="r">Injust.</th><th class="r">Lesión</th><th class="r">%</th></tr></thead><tbody>
  ${rows.map(({p,c})=>`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td>${cell(c.n)}${cell(c.P)}${cell(c.T)}${cell(c.JE)}${cell(c.JT)}${cell(c.JS)}${cell(c.JO)}${c.I?`<td class="r num" style="color:var(--warn);font-weight:600">${c.I}</td>`:cell(0)}${cell(c.L)}<td class="r"><span class="pill ${c.pct==null?'':c.pct>=85?'ok':c.pct>=70?'amber':'warn'}">${c.pct==null?'–':c.pct+'%'}</span></td></tr>`).join('')}
- </tbody></table></div><p style="margin:0;font-size:13px;color:var(--muted)">${ss.length} sesión${ss.length>1?'es':''} con asistencia en el período. Tocá un jugador para ver su ficha.</p>`;
+ </tbody></table></div><p style="margin:0;font-size:13px;color:var(--muted)">${ss.length} sesión${ss.length>1?'es':''} con asistencia en el período. Las sesiones suspendidas no cuentan. Tocá un jugador para ver su ficha.</p>`+cxLine();
 }
 function openAtt(sid){
  const s=S.sessions.find(x=>x.id===sid);if(!s)return;
+ if(s.cancel){toast('La sesión está suspendida. Reactivala para tomar asistencia.');return}
  if(!S.players.length){toast('Primero cargá el plantel.');return}
  const m=attMap(s)||{};const NUM=sessNums();
  editing={key:'att',col:'sessions',id:sid};
@@ -1279,6 +1289,88 @@ function saveAtt(e){
  let rpe=$('#att_rpe').value.trim();if(rpe!==''){rpe=Number(rpe.replace(',','.'));if(isNaN(rpe)||rpe<1||rpe>10){toast('El RPE va de 1 a 10.');return}}
  const body={...s,att,rpe,notes:$('#att_notes').value.trim(),editBy:me.uid,editAt:new Date().toISOString()};delete body.id;delete body.attendance;
  setDoc(doc(db,'sessions',sid),body).catch(err=>toast(errMsg(err)));closeModal();toast('Asistencia guardada');
+}
+
+/* ---------- suspender y pasar de día ---------- */
+const CX=[['lluvia','Lluvia o cancha en mal estado','Lluvia','por lluvia o cancha','por lluvia'],['feriado','Feriado','Feriado','por feriado','por el feriado'],['partido','Partido reprogramado','Partido reprog.','por partido reprogramado','porque se reprogramó el partido'],['ct','Decisión del cuerpo técnico','Decisión del CT','por decisión del CT','por decisión del cuerpo técnico'],['otro','Otro motivo','Otro','por otro motivo','']];
+const cxRow=k=>CX.find(x=>x[0]===k)||CX[4];
+const cxLong=k=>cxRow(k)[1];
+const cxShort=s=>cxRow(s.cancel)[2];
+const dayLong=d=>`${DOWL[parse(d).getDay()]} ${fd(d)}`;
+const relDay=d=>d===today()?'de hoy ':d===addDays(today(),1)?'de mañana ':'del ';
+const nextActive=(s,from)=>sessOrder().find(x=>x.id!==s.id&&!x.cancel&&x.date>from);
+function freeDays(s,after){
+ const c=microOf(s.date);if(!c)return [];const t=today();const mds=microMatches(c).map(m=>m.date);const lim=mds.find(d=>d>s.date)||c.end;
+ return microDays(c).filter(d=>d!==s.date&&d>=t&&d<lim&&(!after||d>s.date)&&!mds.includes(d)&&!S.sessions.some(x=>x.date===d&&!x.cancel&&x.id!==s.id));
+}
+const dayChips=(L,act,id)=>`<div class="cx-days">${L.map(d=>{const code=mdCode(d);return `<button class="chip" type="button" data-act="${act}" data-id="${id}" data-d="${d}"><b>${DOW[parse(d).getDay()]} ${fd(d)}</b>${code}</button>`}).join('')}</div>`;
+function waBox(txt){return `<div class="fld full"><label for="wa_txt">Mensaje para el grupo</label><textarea id="wa_txt" rows="4">${esc(txt)}</textarea><span class="hint">Lo podés cambiar antes de mandarlo.</span></div><div class="formacts"><button type="button" class="btn" data-act="close">Listo</button><a class="btn primary" id="waLink" href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">Enviar por WhatsApp</a></div>`}
+function openCancel(sid){
+ const s=S.sessions.find(x=>x.id===sid);if(!s)return;closeDoc();
+ $('#mTitle').textContent='Suspender sesión';
+ $('#mBody').innerHTML=`<form class="form" id="cxFrm" data-id="${sid}" novalidate>
+ <div class="fld full"><span style="font-size:15px"><b>${esc(s.type||'Sesión')}</b> · ${DOW[parse(s.date).getDay()]} ${fdy(s.date)}${s.time?' · '+esc(s.time)+' h':''}</span></div>
+ <div class="fld full"><span class="lb">Motivo</span><div class="cx-why">${CX.map((c,i)=>`<label><input type="radio" name="cx_r" value="${c[0]}" ${i===0?'checked':''}><span>${c[1]}</span></label>`).join('')}</div></div>
+ <div class="fld full"><label for="cx_n">Nota (opcional)</label><input id="cx_n" maxlength="200" placeholder="Ej.: la cancha está inundada"></div>
+ ${hasAtt(s)||isNum(s.rpe)?`<div class="banner full">Esta sesión ya tiene ${hasAtt(s)?'asistencia':''}${hasAtt(s)&&isNum(s.rpe)?' y ':''}${isNum(s.rpe)?'RPE':''} cargad${hasAtt(s)&&isNum(s.rpe)?'os':'a'}. Si la suspendés deja de contar; si después la reactivás, vuelve a contar como estaba.</div>`:''}
+ <p class="g-sub full" style="margin:0">No cuenta para la asistencia ni para la carga, y no aparece en Pendientes. Lo planificado (tareas, objetivos) queda guardado.</p>
+ <div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">${hasAtt(s)?'Suspender igual':'Suspender sesión'}</button></div></form>`;
+ showModal();
+}
+function cxMsg(s,moved){
+ const r=cxRow(s.cancel);let t=`Se suspende el entrenamiento ${relDay(s.date)}${dayLong(s.date)}${s.time?' ('+s.time+' h)':''}${r[4]?' '+r[4]:''}.`;
+ if(s.cancelNote)t+=' '+s.cancelNote.replace(/\.?$/,'.');
+ const n=moved||nextActive(s,s.date);
+ if(moved)t+=`\nSe pasa al ${dayLong(moved.date)}${moved.time?' a las '+moved.time+' h':''}.`;
+ else if(n)t+=`\nPróximo entrenamiento: ${dayLong(n.date)}${n.time?' a las '+n.time+' h':''}.`;
+ return t;
+}
+function saveCancel(f){
+ const s=S.sessions.find(x=>x.id===f.dataset.id);if(!s)return;const now=new Date().toISOString();
+ const r=f.querySelector('input[name="cx_r"]:checked');
+ const body={...s,cancel:r?r.value:'otro',cancelNote:$('#cx_n').value.trim(),cancelBy:me.uid,cancelAt:now,editBy:me.uid,editAt:now};delete body.id;
+ setDoc(doc(db,'sessions',s.id),body).catch(err=>toast(errMsg(err)));
+ cxDone({...body,id:s.id});
+}
+function cxDone(s,moved){
+ const c=microOf(s.date);const left=c?S.sessions.filter(x=>inRange(x.date,c)&&!x.cancel&&x.id!==s.id).length:0;const fr=moved?[]:freeDays(s,true);
+ $('#mTitle').textContent=moved?'Sesión pasada de día':'Sesión suspendida';
+ $('#mBody').innerHTML=`<div class="form">
+ ${moved?`<p class="full" style="margin:0">Quedó una copia de la sesión el <b>${dayLong(moved.date)}</b>. La suspendida queda registrada.</p>`:
+  c?`<div class="full cx-offer"><b>El microciclo ${microNum(c)} queda con ${left} ${plural(left,'sesión','sesiones')}${c.plannedLoad?` (carga planificada: ${esc(c.plannedLoad)})`:''}.</b>${fr.length?` Si querés recuperarla, pasala a un día libre antes del partido:${dayChips(fr,'cxmove',s.id)}<span class="hint">Se crea una copia en ese día con el mismo horario y las mismas tareas.</span>`:' No quedan días libres antes del partido para recuperarla.'}</div>`:''}
+ ${waBox(cxMsg(s,moved))}</div>`;
+ if($('#modal').hidden)showModal();
+}
+function cxMove(b){
+ const s=S.sessions.find(x=>x.id===b.dataset.id);if(!s)return;const d=b.dataset.d,now=new Date().toISOString();
+ const body={...s,date:d,movedFrom:s.date,squad:s.squad||sq(),by:me.uid,at:now};['id','att','attendance','rpe','shareId','editBy','editAt','cancel','cancelNote','cancelBy','cancelAt','movedAt'].forEach(k=>delete body[k]);
+ setDoc(doc(collection(db,'sessions')),body).catch(err=>toast(errMsg(err)));toast('Sesión copiada al '+dayLong(d));
+ cxDone(s,body);
+}
+function cxUndo(id){
+ const s=S.sessions.find(x=>x.id===id);if(!s)return;const body={...s,editBy:me.uid,editAt:new Date().toISOString()};delete body.id;['cancel','cancelNote','cancelBy','cancelAt'].forEach(k=>delete body[k]);
+ setDoc(doc(db,'sessions',id),body).catch(err=>toast(errMsg(err)));closeDoc();closeModal();toast('Sesión reactivada');
+}
+function openMove(sid){
+ const s=S.sessions.find(x=>x.id===sid);if(!s)return;closeDoc();const fr=freeDays(s,false);
+ $('#mTitle').textContent='Pasar a otro día';
+ $('#mBody').innerHTML=`<form class="form" id="mvFrm" data-id="${sid}" novalidate>
+ <div class="fld full"><span style="font-size:15px"><b>${esc(s.type||'Sesión')}</b> · hoy está el ${DOW[parse(s.date).getDay()]} ${fdy(s.date)}${s.time?' · '+esc(s.time)+' h':''}</span></div>
+ ${fr.length?`<div class="fld full"><span class="lb">Días libres del microciclo</span>${dayChips(fr,'mvpick',sid)}</div>`:''}
+ <div class="fld"><label for="mv_d">Nueva fecha</label><input id="mv_d" type="date" value="${fr[0]||addDays(s.date,1)}" required></div>
+ <div class="fld"><label for="mv_t">Hora</label><input id="mv_t" type="time" value="${esc(s.time||'')}"></div>
+ ${hasAtt(s)?`<div class="banner full">Esta sesión ya tiene asistencia cargada: se mueve con ella.</div>`:''}
+ <div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">Pasar de día</button></div></form>`;
+ showModal();
+}
+function saveMove(f){
+ const s=S.sessions.find(x=>x.id===f.dataset.id);if(!s)return;const d=$('#mv_d').value,tm=$('#mv_t').value;
+ if(!d){toast('Elegí la nueva fecha.');return}if(d===s.date&&tm===(s.time||'')){toast('Es el mismo día y horario.');return}
+ const now=new Date().toISOString();const body={...s,date:d,time:tm,movedFrom:s.movedFrom||s.date,movedAt:now,editBy:me.uid,editAt:now};delete body.id;
+ setDoc(doc(db,'sessions',s.id),body).catch(err=>toast(errMsg(err)));
+ const txt=d===s.date?`Cambio de horario: el entrenamiento ${relDay(s.date)}${dayLong(s.date)} pasa a las ${tm} h.`:`Cambio de día: el entrenamiento ${relDay(s.date)}${dayLong(s.date)} pasa al ${dayLong(d)}${tm?' a las '+tm+' h':''}.`;
+ $('#mTitle').textContent='Sesión pasada de día';
+ $('#mBody').innerHTML=`<div class="form"><p class="full" style="margin:0">La sesión quedó el <b>${dayLong(d)}</b>${tm?' a las '+esc(tm)+' h':''}.</p>${waBox(txt)}</div>`;
 }
 
 /* ---------- gimnasio ---------- */
@@ -1326,9 +1418,10 @@ const sheetHead=(title,no)=>`<div class="sh-head"><img src="logo.png" alt="Escud
 function sessionSheet(s){
  const NUM=sessNums();const mc=microOf(s.date), ms=mesoOf(s.date);const tasks=sessTasks(s);const dur=sessDuration(s);
  const resp=memberName(s.by);
- const meta=[['Fecha',longDate(s.date)],['Hora',s.time?s.time+' h':''],['Tipo',s.type],['Duración',dur?dur+' min':''],['Espacio',s.space],['Microciclo',mc?`MC ${microNum(mc)}${mc.type?' · '+mc.type:''}`:''],['Mesociclo',ms?ms.name:''],['Responsable',resp]].filter(x=>x[1]);
+ const meta=[['Fecha',longDate(s.date)],['Pasada del',s.movedFrom?longDate(s.movedFrom):''],['Hora',s.time?s.time+' h':''],['Tipo',s.type],['Duración',dur?dur+' min':''],['Espacio',s.space],['Microciclo',mc?`MC ${microNum(mc)}${mc.type?' · '+mc.type:''}`:''],['Mesociclo',ms?ms.name:''],['Responsable',resp]].filter(x=>x[1]);
  let lastPart=null;const total=tasks.reduce((a,t)=>a+(isNum(t.time)?+t.time:0),0);
- return sheetHead('Hoja de sesión',NUM[s.id])
+ return sheetHead('Hoja de sesión',s.cancel?null:NUM[s.id])
+ +(s.cancel?`<div class="sh-cx"><b>Sesión suspendida</b> · ${esc(cxLong(s.cancel))}${s.cancelNote?' · '+esc(s.cancelNote):''}<span>No cuenta para la asistencia ni para la carga.</span></div>`:'')
  +`<div class="sh-meta">${meta.map(m=>`<div><div class="k">${m[0]}</div><div class="v">${esc(m[1])}</div></div>`).join('')}</div>`
  +(s.focus?`<div class="sh-sec"><h3>Objetivo general</h3><div style="font-size:16px;font-weight:600">${esc(s.focus)}</div></div>`:'')
  +`<div class="sh-cols"><div class="sh-sec"><h3>Objetivos específicos</h3>${lines(s.objectives).length?`<ul>${lines(s.objectives).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'<div style="color:var(--muted)">—</div>'}</div><div class="sh-sec"><h3>Materiales</h3>${lines(s.materials).length?`<ul>${lines(s.materials).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'<div style="color:var(--muted)">—</div>'}</div></div>`
@@ -1338,7 +1431,7 @@ function sessionSheet(s){
 }
 function openSessionDoc(sid){
  const s=S.sessions.find(x=>x.id===sid);if(!s)return;
- openDoc(sessionSheet(s),`<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools"><button class="btn primary" type="button" data-act="big" data-id="${sid}">Pantalla grande</button><button class="btn" type="button" data-act="print">Descargar PDF</button><button class="btn" type="button" data-act="att" data-id="${sid}">Asistencia</button><button class="btn" type="button" data-act="dup" data-id="${sid}">Duplicar</button><button class="btn" type="button" data-act="edit" data-col="sessions" data-id="${sid}">Editar</button><button class="btn ghost sm danger" type="button" data-act="del" data-col="sessions" data-id="${sid}">Borrar</button></div></div>`);
+ openDoc(sessionSheet(s),`<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools">${s.cancel?`<button class="btn primary" type="button" data-act="cxundo" data-id="${sid}">Reactivar</button><button class="btn" type="button" data-act="print">Descargar PDF</button>`:`<button class="btn primary" type="button" data-act="big" data-id="${sid}">Pantalla grande</button><button class="btn" type="button" data-act="print">Descargar PDF</button><button class="btn" type="button" data-act="att" data-id="${sid}">Asistencia</button><button class="btn" type="button" data-act="smove" data-id="${sid}">Pasar a otro día</button><button class="btn" type="button" data-act="scx" data-id="${sid}">Suspender</button>`}<button class="btn" type="button" data-act="dup" data-id="${sid}">Duplicar</button><button class="btn" type="button" data-act="edit" data-col="sessions" data-id="${sid}">Editar</button><button class="btn ghost sm danger" type="button" data-act="del" data-col="sessions" data-id="${sid}">Borrar</button></div></div>`);
 }
 function routineSheet(r){
  const ex=(r.exercises||[]).filter(x=>x&&x.name);
@@ -1420,7 +1513,8 @@ function vWell(){
  const delBtn=id=>`<button class="btn ghost sm danger" type="button" data-act="del" data-col="checkins" data-id="${id}">Borrar</button>`;
  let out=h+`<div class="stats"><div class="stat"><div class="k">Respondieron</div><div class="v">${ans.length}/${ps.length}</div><div class="s">${d===today()?'hoy':fdy(d)}</div></div><div class="stat"><div class="k">Bienestar promedio</div><div class="v">${avg}</div><div class="s">sobre 20</div></div><div class="stat"><div class="k">Alertas</div><div class="v ${alerts.length?'warn':''}">${alerts.length}</div><div class="s">con algún valor en 1 o 2</div></div><div class="stat"><div class="k">RPE cargados</div><div class="v">${rp.length}</div><div class="s">ese día</div></div></div>`;
  out+=`<div class="tablewrap"><table><thead><tr><th>Jugador</th>${WELL.map(w=>`<th class="r">${w[1]}</th>`).join('')}<th class="r">Total</th><th>Dolor / comentario</th><th></th></tr></thead><tbody>${[...rows].sort((a,b)=>(a.w?wellTotal(a.w):99)-(b.w?wellTotal(b.w):99)).map(({p,w})=>w?`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td>${WELL.map(x=>v(w[x[0]])).join('')}<td class="r num"><b>${wellTotal(w)}</b>/20</td><td style="white-space:normal;min-width:140px">${esc([w.painZone,w.note].filter(Boolean).join(' · '))}</td><td>${delBtn(w.id)}</td></tr>`:`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td><td colspan="${WELL.length+3}" style="color:var(--muted)">Sin responder</td></tr>`).join('')}</tbody></table></div>`;
- out+=`<div class="bar"><div><h2 style="font-size:22px">Esfuerzo (RPE) del día</h2><p>Carga individual = RPE × minutos.</p></div></div>`;
+ {const sd=S.sessions.filter(x=>x.date===d);const cxd=sd.length&&sd.every(x=>x.cancel);
+ out+=`<div class="bar"><div><h2 style="font-size:22px">Esfuerzo (RPE) del día</h2><p>Carga individual = RPE × minutos.${cxd?' <b>El entrenamiento de este día se suspendió</b>: los RPE de "Equipo" no corresponden a una sesión.':''}</p></div></div>`;}
  out+=rp.length?`<div class="tablewrap"><table><thead><tr><th>Jugador</th><th>Actividad</th><th class="r">RPE</th><th class="r">Min</th><th class="r">Carga</th><th>Comentario</th><th></th></tr></thead><tbody>${rp.sort((a,b)=>(b.rpe||0)-(a.rpe||0)).map(c=>`<tr><td>${esc(plName(c.player))}</td><td>${esc(c.activity||'')}</td><td class="r"><span class="wv ${+c.rpe>=8?'lo':''}">${esc(c.rpe)}</span></td><td class="r num">${esc(c.minutes??'')}</td><td class="r num">${isNum(c.minutes)?Math.round(c.rpe*c.minutes):''}</td><td style="white-space:normal;min-width:140px">${esc(c.note||'')}</td><td>${delBtn(c.id)}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty"><strong>Sin RPE ese día</strong><p>Después de entrenar, cada jugador carga su esfuerzo del 1 al 10 y los minutos desde su link.</p></div>`;
  return out;
 }
@@ -1526,6 +1620,11 @@ document.addEventListener('click',e=>{
  else if(a==='sheet'){if(e.target.closest('.acts')&&b.classList.contains('row'))return;openSessionDoc(b.dataset.id)}
  else if(a==='rsheet'){openRoutineDoc(b.dataset.id)}
  else if(a==='att'){e.stopPropagation();openAtt(b.dataset.id)}
+ else if(a==='scx')openCancel(b.dataset.id);
+ else if(a==='cxundo'){e.stopPropagation();cxUndo(b.dataset.id)}
+ else if(a==='cxmove')cxMove(b);
+ else if(a==='smove')openMove(b.dataset.id);
+ else if(a==='mvpick'){$('#mv_d').value=b.dataset.d;document.querySelectorAll('#mvFrm .cx-days .chip').forEach(x=>x.classList.toggle('on',x===b))}
  else if(a==='big'){e.stopPropagation();openBig(b.dataset.id)}
  else if(a==='docclose')closeDoc();
  else if(a==='print'){try{window.print()}catch(_){toast('No se pudo abrir la descarga. Usá Compartir → Imprimir del navegador.')}}
@@ -1604,6 +1703,7 @@ document.addEventListener('input',e=>{
  const id=e.target.id||'';
  if(['rc_work','rc_pct','rc_rest','rc_try'].includes(id))rcInput(e.target);
  if(id.startsWith('ssg_')){SSGC[id.slice(4)]=e.target.value;const o=$('#ssgOut');if(o)o.innerHTML=ssgOutHTML()}
+ if(id==='wa_txt'){const l=$('#waLink');if(l)l.href='https://wa.me/?text='+encodeURIComponent(e.target.value)}
  if(id==='plQ'){plQ=e.target.value;const l=$('#plList');if(l){l.innerHTML=plRows();hydrateMedia(l)}}
  if(id==='rm_kg'||id==='rm_reps'){RM[id.slice(3)]=e.target.value;const o=$('#rmOut');if(o)o.innerHTML=rmOutHTML()}
 });
@@ -1612,6 +1712,8 @@ document.addEventListener('submit',e=>{
  if(id==='authFrm')return onAuthForm(e);
  if(id==='frm')return submitForm(e);
  if(id==='attFrm')return saveAtt(e);
+ if(id==='cxFrm'){e.preventDefault();return saveCancel(e.target)}
+ if(id==='mvFrm'){e.preventDefault();return saveMove(e.target)}
  if(id==='gyFrm')return createYear(e);
  if(id==='libFrm')return saveLib(e);
  if(id==='gmFrm')return createGuideSessions(e);
