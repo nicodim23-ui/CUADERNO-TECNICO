@@ -7,7 +7,9 @@ import { LIB, LIB_PATTERNS, LEVELS } from "./library.js?v=2";
 
 const COLS=['players','sessions','tests','injuries','routines','matches','mesos','micros','gymlogs','checkins','exercises'];
 const NEW_COLS=['mesos','micros','gymlogs','checkins','exercises']; // necesitan las reglas nuevas de Firestore
-const S={};COLS.forEach(c=>S[c]=[]);
+const S={};COLS.forEach(c=>S[c]=[]);S.exPlayers=[];
+const R={};COLS.forEach(c=>R[c]=[]);
+const SQUAD_COLS=['sessions','matches','mesos','micros'];
 let club={name:''}, access=null, members={}, me=null, tab='resumen', testFilter='', injFilter='activas', attRange='30', gymFilter='', unsubs=[], rulesOld=false;
 const pubMatch=location.hash.match(/^#r-([A-Za-z0-9]{12,40})$/);
 const plMatch=location.hash.match(/^#j-([A-Za-z0-9]{12,40})$/);
@@ -37,7 +39,18 @@ const fdy=s=>{const d=parse(s);return d?fd(s)+'/'+String(d.getFullYear()).slice(
 const dateCell=s=>{const d=parse(s);return `<div class="date">${d?DOW[d.getDay()]:''}<b>${fd(s)}</b></div>`};
 const age=s=>{const d=parse(s);if(!d)return null;const n=new Date();let a=n.getFullYear()-d.getFullYear();if(n<new Date(n.getFullYear(),d.getMonth(),d.getDate()))a--;return a};
 const ago=iso=>{if(!iso)return'';const m=Math.round((Date.now()-new Date(iso))/6e4);if(m<1)return'recién';if(m<60)return`hace ${m} min`;const h=Math.round(m/60);if(h<24)return`hace ${h} h`;const d=Math.round(h/24);return d<30?`hace ${d} d`:new Date(iso).toLocaleDateString('es-AR')};
-const pl=id=>S.players.find(p=>p.id===id);
+const pl=id=>R.players.find(p=>p.id===id);
+/* planteles o categorías */
+const squads=()=>{const l=(club.squads||[]).filter(x=>x&&x.id&&x.name);return l.length?l:[{id:'main',name:club.name||'Primera'}]};
+let curSquad=(()=>{try{return localStorage.getItem('ct_squad')||''}catch(_){return ''}})();
+const sq=()=>{const l=squads();return l.some(x=>x.id===curSquad)?curSquad:l[0].id};
+const sqName=id=>{const x=squads().find(v=>v.id===(id||sq()));return x?x.name:''};
+const inSq=d=>squads().length<2||(d.squad||squads()[0].id)===sq();
+function derive(){
+ const all=R.players.filter(inSq);S.players=all.filter(p=>!p.baja);S.exPlayers=all.filter(p=>p.baja);
+ const ids=new Set(all.map(p=>p.id));
+ COLS.forEach(c=>{if(c==='players')return;S[c]=SQUAD_COLS.includes(c)?R[c].filter(inSq):['tests','injuries','gymlogs','checkins'].includes(c)&&squads().length>1?R[c].filter(d=>!d.player||ids.has(d.player)):R[c]});
+}
 const plName=id=>{const p=pl(id);return p?p.name:'Jugador eliminado'};
 const pname=id=>{if(!id)return'Alguien';if(me&&id===me.uid)return'Vos';const m=members[id];return (m&&m.name)||'Alguien del cuerpo técnico'};
 const COLORS=['#1E6A44','#2563A8','#8A4FB0','#B5482A','#7A6A12','#0F7B7B','#A33B6B','#4B5BA6'];
@@ -46,7 +59,9 @@ const isNum=v=>v!==''&&v!=null&&!isNaN(v);
 const load=s=>{const d=sessDuration(s);return (isNum(s.rpe)&&d)?Math.round(s.rpe*d):null};
 const byDateDesc=(a,b)=>(b.date||'').localeCompare(a.date||'')||(b.at||'').localeCompare(a.at||'');
 const activeInj=()=>S.injuries.filter(i=>i.status!=='Alta');
-const availability=id=>{const inj=activeInj().filter(i=>i.player===id);if(!inj.length)return['Disponible','ok'];return inj.some(i=>i.status==='Activa')?['Lesionado','warn']:['Readaptación','amber']};
+const ST_CL={Suspendido:'warn','Con permiso':'acc',Enfermo:'amber'};
+const availability=id=>{const inj=activeInj().filter(i=>i.player===id);if(inj.length)return inj.some(i=>i.status==='Activa')?['Lesionado','warn']:['Readaptación','amber'];
+ const p=pl(id);if(p&&p.status&&(!p.statusUntil||p.statusUntil>=today()))return [p.status,ST_CL[p.status]||'amber'];return['Disponible','ok']};
 const sortedPlayers=()=>[...S.players].sort((a,b)=>(+a.number||999)-(+b.number||999)||(a.name||'').localeCompare(b.name||''));
 const isAdmin=()=>!!(access&&me&&access.owner===me.email.toLowerCase());
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -148,7 +163,7 @@ async function onAuthForm(e){
 }
 
 /* ---------- sesión y datos ---------- */
-function stopData(){unsubs.forEach(u=>{try{u()}catch(_){}});unsubs=[];access=null;members={};COLS.forEach(c=>S[c]=[]);club={name:''}}
+function stopData(){unsubs.forEach(u=>{try{u()}catch(_){}});unsubs=[];access=null;members={};COLS.forEach(c=>{S[c]=[];R[c]=[]});S.exPlayers=[];club={name:''}}
 onAuthStateChanged(auth,user=>{
  if(publicMode)return;
  stopData();me=user;
@@ -178,9 +193,9 @@ function startData(){
  const nm=me.displayName||me.email.split('@')[0];
  setDoc(doc(db,'members',me.uid),{name:nm,email:me.email.toLowerCase(),seen:new Date().toISOString()}).catch(()=>{});
  rulesOld=false;
- COLS.forEach(col=>unsubs.push(onSnapshot(collection(db,col),s=>{S[col]=s.docs.map(d=>({...d.data(),id:d.id}));render()},err=>{if(err&&err.code==='permission-denied'&&NEW_COLS.includes(col)){rulesOld=true;render()}})));
+ COLS.forEach(col=>unsubs.push(onSnapshot(collection(db,col),s=>{R[col]=s.docs.map(d=>({...d.data(),id:d.id}));derive();render()},err=>{if(err&&err.code==='permission-denied'&&NEW_COLS.includes(col)){rulesOld=true;render()}})));
  unsubs.push(onSnapshot(collection(db,'members'),s=>{members={};s.docs.forEach(d=>members[d.id]=d.data());render()},()=>{}));
- unsubs.push(onSnapshot(doc(db,'config','club'),s=>{club=s.exists()?s.data():{name:''};render()},()=>{}));
+ unsubs.push(onSnapshot(doc(db,'config','club'),s=>{club=s.exists()?s.data():{name:''};derive();render()},()=>{}));
 }
 window.addEventListener('online',()=>render());window.addEventListener('offline',()=>render());
 
@@ -189,13 +204,27 @@ const POS=['Arquero','Defensor central','Lateral derecho','Lateral izquierdo','V
 const SCHEMA={
  players:{one:'jugador',fields:[
   {k:'name',l:'Nombre y apellido',t:'text',req:1,full:1},
+  {k:'squad',l:'Plantel o categoría',t:'squad'},
   {k:'number',l:'Dorsal',t:'number',min:1,max:99},
   {k:'position',l:'Posición',t:'select',opts:POS},
+  {k:'position2',l:'Posición secundaria',t:'select',opts:POS},
   {k:'birth',l:'Fecha de nacimiento',t:'date'},
+  {k:'dni',l:'DNI',t:'text',ph:'Sin puntos'},
   {k:'foot',l:'Pie hábil',t:'select',opts:['Derecho','Izquierdo','Ambos']},
   {k:'height',l:'Altura (cm)',t:'number',min:120,max:230},
   {k:'weight',l:'Peso (kg)',t:'number',step:'0.1',min:30,max:150},
-  {k:'contact',l:'Contacto',t:'text',full:1,ph:'Teléfono o contacto de un familiar'},
+  {k:'photo',l:'Foto',t:'image',full:1},
+  {t:'sec',l:'Estado'},
+  {k:'status',l:'Estado (además de las lesiones)',t:'select',opts:['Suspendido','Con permiso','Enfermo'],blank:'Normal'},
+  {k:'statusUntil',l:'Hasta',t:'date',hint:'Vacío: hasta que lo cambies.'},
+  {t:'sec',l:'Contacto y salud'},
+  {k:'phone',l:'Celular del jugador',t:'tel'},
+  {k:'contact',l:'Contacto de emergencia',t:'text',ph:'Nombre y parentesco'},
+  {k:'contactPhone',l:'Teléfono de emergencia',t:'tel'},
+  {k:'health',l:'Obra social o prepaga',t:'text'},
+  {k:'healthNum',l:'Número de afiliado',t:'text'},
+  {k:'apto',l:'Vencimiento del apto médico',t:'date',hint:'Avisa en Pendientes 15 días antes.'},
+  {t:'sec',l:'Gimnasio'},
   {k:'gym',l:'¿Hace gimnasio?',t:'select',opts:['Sí','No']},
   {k:'gymDays',l:'Días de gimnasio por semana',t:'number',min:0,max:7},
   {k:'gymPlace',l:'Dónde hace gimnasio',t:'text',full:1,ph:'Gimnasio del club, gimnasio externo, en casa…'},
@@ -315,7 +344,7 @@ function doRender(){
  const cnt=k=>k==='routines'?S.routines.filter(r=>!isGym(r)).length:['players','sessions','tests','injuries','matches'].includes(k)?S[k].length:null;
  $('#tabs').innerHTML=tabs.map(([k,l])=>{const c=cnt(k);return `<button class="tab" role="tab" type="button" aria-selected="${tab===k}" data-act="tab" data-k="${k}">${l}${c!=null?`<span class="c">${c}</span>`:''}</button>`}).join('');
  const conn=navigator.onLine?'<span class="pill ok"><span class="dot"></span>En línea</span>':'<span class="pill amber"><span class="dot"></span>Sin conexión · se guarda y sincroniza después</span>';
- $('#who').innerHTML=`${conn}<button class="btn ghost sm me-btn" type="button" data-act="tab" data-k="config" aria-label="Abrir configuración">${me?avatar(me.uid):''}<span>${esc(me?(me.displayName||me.email):'')}</span></button>`;
+ const SQ=squads();$('#who').innerHTML=`${SQ.length>1?`<select id="squadSel" class="sq-sel" aria-label="Plantel">${SQ.map(x=>`<option value="${x.id}" ${x.id===sq()?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`:''}${conn}<button class="btn ghost sm me-btn" type="button" data-act="tab" data-k="config" aria-label="Abrir configuración">${me?avatar(me.uid):''}<span>${esc(me?(me.displayName||me.email):'')}</span></button>`;
  // No re-dibujar Configuración mientras se escribe en uno de sus campos.
  if(tab==='config'&&document.activeElement&&document.activeElement.closest('#view form'))return;
  const banner=rulesOld&&['plan','gym','well','resumen'].includes(tab)?`<div class="banner">Falta actualizar las reglas de Firebase para usar Planificación, Gimnasio, Bienestar y los links de los jugadores. Pedile al administrador que las actualice.</div>`:'';
@@ -360,6 +389,8 @@ function pendings(NUM){
    if(miss.length)out.push({txt:`${miss.length} ${plural(miss.length,'jugador no cargó','jugadores no cargaron')} el RPE de la sesión del ${sd(lastS)}`,names:miss.map(plName),act:'tab',k:'well',btn:'Ir a Bienestar'});
   }else if(!isNum(lastS.rpe))out.push({txt:`Falta el RPE de la sesión del ${sd(lastS)}`,act:'att',id:lastS.id,btn:'Cargar RPE'});
  }
+ const apt=sortedPlayers().filter(p=>p.apto&&daysBetween(t,p.apto)<=15);
+ if(apt.length)out.push({txt:`${apt.length} ${plural(apt.length,'apto médico vencido o por vencer','aptos médicos vencidos o por vencer')}`,names:apt.map(p=>`${p.name} (${daysBetween(t,p.apto)<0?'venció':'vence'} ${fd(p.apto)})`),act:'tab',k:'players',btn:'Ir a Plantel'});
  const noIft=sortedPlayers().filter(p=>!isGK(p)&&!lastTest(p.id,['30-15 IFT','30-15']));
  if(noIft.length&&S.players.length)out.push({txt:`${noIft.length} ${plural(noIft.length,'jugador','jugadores')} sin 30-15 IFT (lo usa la calculadora de Resistencia)`,names:noIft.map(p=>p.name),act:'tab',k:'tests',btn:'Ir a Tests'});
  return out;
@@ -398,7 +429,7 @@ function vResumen(){
   h+=`<div class="panel"><h3>Pendientes <small>${P.length?P.length+' '+plural(P.length,'cosa','cosas'):'al día'}</small></h3><div class="body">${P.length?`<div class="pend">${P.map(x=>`<div class="pend-it"><div class="pend-t">${x.txt}${x.names?`<details><summary>Ver quiénes</summary><div class="g-sub">${x.names.map(esc).join(', ')}</div></details>`:''}</div><button class="btn sm" type="button" data-act="${x.act}" ${x.id?`data-id="${x.id}"`:''} ${x.k?`data-k="${x.k}"`:''}>${x.btn}</button></div>`).join('')}</div>`:`<p style="margin:0;color:var(--muted)">No hay nada pendiente.</p>`}</div></div>`;}
  h+=`<div class="stats">
   <div class="stat"><div class="k">Plantel</div><div class="v">${n}</div><div class="s">jugadores cargados</div></div>
-  <div class="stat"><div class="k">Disponibles</div><div class="v">${n-injPlayers.length}</div><div class="s">${attPct!=null?`asistencia semanal ${attPct} %`:'sin sesiones esta semana'}</div></div>
+  <div class="stat"><div class="k">Disponibles</div><div class="v">${S.players.filter(p=>availability(p.id)[0]==='Disponible').length}</div><div class="s">${attPct!=null?`asistencia semanal ${attPct} %`:'sin sesiones esta semana'}</div></div>
   <div class="stat"><div class="k">Lesionados</div><div class="v ${injPlayers.length?'warn':''}">${injPlayers.length}</div><div class="s">${inj.filter(i=>i.status==='En readaptación').length} en readaptación</div></div>
   <div class="stat"><div class="k">Carga 7 días</div><div class="v">${wkLoad.toLocaleString('es-AR')}</div><div class="s">RPE × minutos${trend!=null?` · ${trend>0?'+':''}${trend} % vs los 7 anteriores`:''}</div></div>
  </div><div class="cols"><div class="col">`;
@@ -430,15 +461,6 @@ function feed(max=14){
  return `<div class="feed">${items.slice(0,max).map(i=>`<div class="it">${avatar(i.by)}<div><b>${esc(pname(i.by))}</b> ${i.txt} <b>${esc(i.obj||'')}</b><div class="when">${ago(i.when)}</div></div></div>`).join('')}</div>${items.length>5&&max<=5?`<button class="btn sm" type="button" data-act="feedall" style="margin-top:10px">Ver todo</button>`:max>5&&tab==='resumen'?`<button class="btn sm" type="button" data-act="feedall" style="margin-top:10px">Ver menos</button>`:''}`;
 }
 function attPctFor(id){return attStats(id,S.sessions.filter(s=>inLastDays(s.date,30))).pct}
-function vPlayers(){
- const ps=sortedPlayers();
- const h=`<div class="bar"><div><h2>Plantel</h2><p>Tocá un jugador para ver su historial completo.</p></div><div class="tools">${addBtn('players','Jugador')}</div></div>`;
- if(!ps.length)return h+empty('Sin jugadores todavía','Cargá nombre, dorsal y posición. Con eso ya podés tomar asistencia en los entrenamientos.','players','Agregar jugador');
- return h+`<div class="list">${ps.map(p=>{const [st,cl]=availability(p.id);const a=age(p.birth);const ap=attPctFor(p.id);
-  return `<div class="row r-player click" data-act="player" data-id="${p.id}"><div class="dorsal">${isNum(p.number)?+p.number:'–'}</div>
-  <div class="main"><div class="t">${esc(p.name)}</div><div class="m">${p.position?`<span>${esc(p.position)}</span>`:''}${a!=null?`<span>${a} años</span>`:''}${ap!=null?`<span>Asistencia 30 d: ${ap}%</span>`:''}</div></div>
-  <span class="pill ${cl}"><span class="dot"></span>${st}</span>${rowActs('players',p.id)}</div>`}).join('')}</div>`;
-}
 function sessRow(s,NUM){
  const L=load(s);const m=attMap(s);const v=m?Object.values(m):[];const pres=v.filter(x=>x==='P'||x==='T').length;const mc=microOf(s.date);const dur=sessDuration(s);const nt=sessTasks(s).length;
  return `<div class="row r-std click" data-act="sheet" data-id="${s.id}">${dateCell(s.date)}<div class="main"><div class="t"><span class="snum">N° ${NUM[s.id]}</span> ${esc(s.type||'Sesión')}${s.time?` <span class="mono" style="color:var(--muted);font-weight:400">${esc(s.time)}</span>`:''}</div><div class="m">${s.focus?`<span>${esc(s.focus)}</span>`:''}${mc?`<span>MC ${microNum(mc)}${mc.type?' · '+esc(mc.type):''}</span>`:''}${nt?`<span>${nt} tarea${nt>1?'s':''}</span>`:''}${byline(s)}</div></div>
@@ -500,6 +522,13 @@ function vMatches(){
   <div class="side"><div class="figs">${has?`<span class="score">${+m.gf} – ${+m.ga}</span>`:''}<span class="pill ${res[1]}">${res[0]}</span></div>${rowActs('matches',m.id)}</div>
   ${m.notes?`<div class="notes">${esc(m.notes)}</div>`:''}</div>`}).join('')}</div>`;
 }
+const sqRow=(x,i)=>`<div class="sq-row" data-sq="${x.id}"><input type="text" value="${esc(x.name)}" placeholder="Ej: Reserva" aria-label="Nombre del plantel ${i+1}">${i?`<button class="btn ghost sm danger" type="button" data-act="sqdel">Quitar</button>`:'<span class="g-sub">Principal</span>'}</div>`;
+function saveSquads(){
+ const L=[...document.querySelectorAll('#sqList .sq-row')].map(r=>({id:r.dataset.sq,name:r.querySelector('input').value.trim()}));
+ if(L.some(x=>!x.name)){toast('Poné un nombre a cada plantel.');return}
+ document.activeElement&&document.activeElement.blur();
+ club={...club,squads:L};setDoc(doc(db,'config','club'),{...club,editBy:me.uid,editAt:new Date().toISOString()}).catch(err=>toast(errMsg(err)));derive();render();toast('Planteles guardados');
+}
 function vConfig(){
  const admin=isAdmin();
  let h=`<div class="bar"><div><h2>Configuración</h2><p>${admin?'Datos del equipo, accesos del cuerpo técnico y tu cuenta.':'Tu cuenta y datos del equipo.'}</p></div></div>`;
@@ -507,6 +536,7 @@ function vConfig(){
  h+=`<div class="panel"><h3>Equipo</h3><div class="body">${admin
   ?`<form id="clubFrm" class="form" novalidate><div class="fld full"><label for="clubIn">Nombre del equipo o categoría</label><input id="clubIn" value="${esc(club.name)}" placeholder="Ej: Primera división" required><span class="hint">Es el nombre que aparece arriba, al lado del escudo.</span></div><div class="formacts"><button class="btn primary" type="submit">Guardar nombre</button></div></form>`
   :`<div class="mini"><div><span style="color:var(--muted)">Nombre</span><span>${esc(club.name||'Mi equipo')}</span></div></div><p class="hint" style="margin:8px 0 0;font-size:13px;color:var(--muted)">Solo el administrador puede cambiar los datos del equipo.</p>`}</div></div>`;
+ if(admin){const L=squads();h+=`<div class="panel"><h3>Planteles o categorías <small>${L.length}</small></h3><div class="body"><form id="sqFrm" class="form" novalidate><p class="full" style="margin:0;color:var(--muted);font-size:14px">Si manejan más de un plantel (por ejemplo, Primera y Reserva), cargalos acá. Arriba aparece un selector para pasar de uno a otro, y cada uno tiene sus jugadores, sesiones, partidos y planificación. Las rutinas, los ejercicios y la Guía son compartidos.</p><div class="full sq-list" id="sqList">${L.map((x,i)=>sqRow(x,i)).join('')}</div><div class="full"><button class="btn sm" type="button" data-act="sqadd">+ Agregar plantel</button></div><div class="formacts"><button class="btn primary" type="submit">Guardar planteles</button></div></form></div></div>`}
  // Accesos
  if(admin){
   const emails=(access&&access.emails)||[];const byMail={};Object.entries(members).forEach(([id,m])=>{if(m.email)byMail[m.email]={id,...m}});
@@ -528,25 +558,104 @@ function vConfig(){
 }
 
 /* ---------- detalle de jugador ---------- */
+/* ---------- plantel ---------- */
+const LINES=['Arqueros','Defensores','Volantes','Delanteros','Sin posición'];
+const lineOf=p=>{const x=p.position||'';return x==='Arquero'?0:/Defensor|Lateral/.test(x)?1:/Volante|Enganche/.test(x)?2:/Extremo|Delantero/.test(x)?3:4};
+let plQ='',plF='todos';
+const aptoState=p=>{if(!p.apto)return null;const d=daysBetween(today(),p.apto);return d<0?['Apto vencido','warn']:d<=15?['Apto vence '+fd(p.apto),'amber']:['Apto al '+fdy(p.apto),'ok']};
+const photoHTML=(p,cls)=>okMedia(p.photo)?`<img class="${cls}" data-media="${esc(p.photo)}" alt="" hidden>`:'';
+function plRows(){
+ const q=plQ.trim().toLowerCase();
+ let ps=(plF==='baja'?[...S.exPlayers].sort((a,b)=>(a.name||'').localeCompare(b.name||'')):sortedPlayers());
+ if(plF==='disp')ps=ps.filter(p=>availability(p.id)[0]==='Disponible');
+ if(plF==='no')ps=ps.filter(p=>availability(p.id)[0]!=='Disponible');
+ if(q)ps=ps.filter(p=>(p.name||'').toLowerCase().includes(q)||String(p.number||'')===q);
+ if(!ps.length)return `<p style="color:var(--muted);margin:8px 0">${plF==='baja'?'No hay jugadores dados de baja.':'Ningún jugador coincide con la búsqueda.'}</p>`;
+ const row=p=>{const [st,cl]=plF==='baja'?['De baja','']:availability(p.id);const a=age(p.birth);const ap=attPctFor(p.id);const apt=aptoState(p);
+  return `<div class="row r-player click" data-act="player" data-id="${p.id}"><div class="dorsal">${photoHTML(p,'pl-ph')}<span>${isNum(p.number)?+p.number:'–'}</span></div>
+  <div class="main"><div class="t">${esc(p.name)}</div><div class="m">${p.position?`<span>${esc(p.position)}${p.position2?' / '+esc(p.position2):''}</span>`:''}${a!=null?`<span>${a} años</span>`:''}${plF==='baja'?`<span>Baja ${fdy(p.baja)}${p.bajaMotivo?' · '+esc(p.bajaMotivo):''}</span>`:ap!=null?`<span>Asistencia 30 d: ${ap} %</span>`:''}</div></div>
+  <span class="pl-tags">${st!=='Disponible'?`<span class="pill ${cl}"><span class="dot"></span>${esc(st)}</span>`:''}${apt&&apt[1]!=='ok'&&plF!=='baja'?`<span class="pill ${apt[1]}">${apt[0]}</span>`:''}</span></div>`};
+ if(plF==='baja')return `<div class="list">${ps.map(row).join('')}</div>`;
+ const g=LINES.map(()=>[]);ps.forEach(p=>g[lineOf(p)].push(p));
+ return g.map((list,i)=>list.length?`<div class="pl-grp"><h3>${LINES[i]} <small>${list.length}</small></h3><div class="list">${list.map(row).join('')}</div></div>`:'').join('');
+}
+function vPlayers(){
+ const ps=sortedPlayers();const disp=ps.filter(p=>availability(p.id)[0]==='Disponible').length;
+ const h=`<div class="bar"><div><h2>Plantel${squads().length>1?' · '+esc(sqName()):''}</h2><p>${ps.length} ${plural(ps.length,'jugador','jugadores')} · ${disp} ${plural(disp,'disponible','disponibles')}. Tocá un jugador para ver su ficha.</p></div><div class="tools">${ps.length?`<button class="btn" type="button" data-act="pexport">Descargar lista</button>`:''}${addBtn('players','Jugador')}</div></div>`;
+ if(!ps.length&&!S.exPlayers.length)return h+empty('Sin jugadores todavía','Cargá nombre, dorsal y posición. Con eso ya podés tomar asistencia en los entrenamientos.','players','Agregar jugador');
+ return h+`<div class="pl-ctl"><div class="fld"><label for="plQ">Buscar</label><input id="plQ" type="search" placeholder="Nombre o dorsal" value="${esc(plQ)}" autocomplete="off"></div><div class="fld"><label for="plF">Mostrar</label><select class="flt" id="plF">${[['todos','Todos'],['disp','Disponibles'],['no','No disponibles'],['baja',`De baja (${S.exPlayers.length})`]].map(o=>`<option value="${o[0]}" ${plF===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div></div><div id="plList">${plRows()}</div>`;
+}
+function testTrend(id){
+ const by={};S.tests.filter(t=>t.player===id&&isNum(t.value)).forEach(t=>{const k=tnorm(t.test);(by[k]=by[k]||[]).push(t)});
+ return Object.values(by).map(list=>{list.sort(byDateDesc);const [a,b]=list;const low=a.unit==='s'||/sprint|505|t-test|velocidad 1|cod|tiempo/i.test(a.test||'');
+  let tr='';if(b){const d=Math.round((+a.value-+b.value)*100)/100;const good=low?d<0:d>0;tr=d===0?`<span class="trend">= igual</span>`:`<span class="trend ${good?'up':'down'}">${good?'▲ mejoró':'▼ empeoró'} ${d>0?'+':''}${String(d).replace('.',',')}</span>`}
+  return {a,tr,n:list.length}}).sort((x,y)=>(x.a.test||'').localeCompare(y.a.test||''));
+}
 function openPlayer(id){
- const p=pl(id);if(!p)return;const [st,cl]=availability(id);const a=age(p.birth);const ap=attPctFor(id);
+ const p=pl(id);if(!p)return;const baja=!!p.baja;const [st,cl]=baja?['De baja','']:availability(id);const a=age(p.birth);const ap=attPctFor(id);
  const tests=S.tests.filter(t=>t.player===id).sort(byDateDesc);const inj=S.injuries.filter(i=>i.player===id).sort(byDateDesc);
  const matches=S.matches.filter(m=>Array.isArray(m.squad)&&m.squad.includes(id)).length;
- const facts=[['Posición',p.position],['Edad',a!=null?a+' años ('+fdy(p.birth)+')':''],['Pie hábil',p.foot],['Altura',isNum(p.height)?p.height+' cm':''],['Peso',isNum(p.weight)?p.weight+' kg':''],['Contacto',p.contact],['Asistencia últimos 30 días',ap!=null?ap+'%':'Sin registros'],['Convocatorias',String(matches)],['Gimnasio',p.gym==='Sí'?['Sí',isNum(p.gymDays)?p.gymDays+' días/semana':'',p.gymPlace].filter(Boolean).join(' · '):p.gym]].filter(x=>x[1]);
+ const ift=lastTest(id,['30-15 IFT','30-15']);const wl=S.checkins.filter(c=>c.player===id&&c.kind==='well').sort(byDateDesc)[0];
+ const actInj=inj.find(i=>i.status!=='Alta');const lastInj=inj[0];const sinceInj=lastInj&&!actInj?daysBetween(lastInj.returned||lastInj.date,today()):null;
+ const kpis=[['Asistencia 30 días',ap!=null?ap+' %':'—',''],['Último 30-15 IFT',ift?String(ift.value).replace('.',',')+' km/h':'—',ift?fdy(ift.date):'Sin medir'],['Último bienestar',wl?wellTotal(wl)+' de 20':'—',wl?fdy(wl.date):'Sin respuestas'],['Lesiones',actInj?'Lesionado':sinceInj!=null?sinceInj+' días':'Ninguna',actInj?esc(actInj.zone||''):sinceInj!=null?'desde la última':'registrada']];
+ const facts=[['Posición',[p.position,p.position2].filter(Boolean).join(' / ')],['Edad',a!=null?a+' años ('+fdy(p.birth)+')':''],['DNI',p.dni],['Pie hábil',p.foot],['Altura',isNum(p.height)?p.height+' cm':''],['Peso',isNum(p.weight)?p.weight+' kg':''],['Convocatorias',matches?String(matches):''],['Gimnasio',p.gym==='Sí'?['Sí',isNum(p.gymDays)?p.gymDays+' días por semana':'',p.gymPlace].filter(Boolean).join(' · '):p.gym],...(squads().length>1?[['Plantel',sqName(p.squad||squads()[0].id)]]:[])].filter(x=>x[1]);
+ const tel=v=>v?`<a href="tel:${esc(String(v).replace(/[^\d+]/g,''))}">${esc(v)}</a>`:'';
+ const apt=aptoState(p);
+ const health=[['Celular',tel(p.phone)],['Emergencia',[esc(p.contact||''),tel(p.contactPhone)].filter(Boolean).join(' · ')],['Obra social',[esc(p.health||''),p.healthNum?'N° '+esc(p.healthNum):''].filter(Boolean).join(' · ')],['Apto médico',apt?`<span class="pill ${apt[1]}">${apt[0]}</span>`:'<span style="color:var(--muted)">Sin cargar</span>']].filter(x=>x[1]);
  const as=attStats(id,S.sessions.filter(s=>inLastDays(s.date,30)));
  const gl=gymAll().filter(g=>g.player===id).sort(byDateDesc).slice(0,6);
  const gr=S.routines.filter(r=>isGym(r)&&Array.isArray(r.assigned)&&r.assigned.includes(id));
+ const TT=testTrend(id);
  $('#mTitle').textContent='Ficha del jugador';
- $('#mBody').innerHTML=`<div class="det-head"><div class="dorsal">${isNum(p.number)?+p.number:'–'}</div><div><div style="font-family:var(--f-display);font-size:28px;font-weight:700;text-transform:uppercase;line-height:1.05">${esc(p.name)}</div><span class="pill ${cl}"><span class="dot"></span>${st}</span></div></div>
+ $('#mBody').innerHTML=`<div class="det-head">${okMedia(p.photo)?`<img class="det-ph" data-media="${esc(p.photo)}" alt="" hidden>`:''}<div class="dorsal">${isNum(p.number)?+p.number:'–'}</div><div><div style="font-family:var(--f-display);font-size:28px;font-weight:700;text-transform:uppercase;line-height:1.05">${esc(p.name)}</div><span class="pill ${cl}"><span class="dot"></span>${esc(st)}${!baja&&p.status&&st===p.status&&p.statusUntil?' hasta '+fd(p.statusUntil):''}</span></div></div>
+ ${baja?`<div class="banner">Dado de baja el ${fdy(p.baja)}${p.bajaMotivo?' · '+esc(p.bajaMotivo):''}${p.bajaNota?'. '+esc(p.bajaNota):''}. Sus datos quedan guardados.</div>`:''}
+ <div class="det-kpi">${kpis.map(k=>`<div><span class="k">${k[0]}</span><b>${k[1]}</b><span class="s">${k[2]}</span></div>`).join('')}</div>
  <div class="det-sec"><h4>Datos</h4><div class="mini">${facts.map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span>${esc(f[1])}</span></div>`).join('')}</div></div>
+ <div class="det-sec"><h4>Contacto y salud</h4>${health.length?`<div class="mini">${health.map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span>${f[1]}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin datos cargados.</div>'}</div>
  ${p.notes?`<div class="det-sec"><h4>Observaciones</h4><div style="white-space:pre-wrap">${esc(p.notes)}</div></div>`:''}
  <div class="det-sec"><h4>Asistencia últimos 30 días</h4>${as.n?`<div class="att-sum">${ATT.filter(x=>as[x[0]]).map(x=>`<span class="pill ${x[2]}">${x[1]}: ${as[x[0]]}</span>`).join('')}</div>`:'<div style="color:var(--muted)">Sin registros de asistencia.</div>'}</div>
- <div class="det-sec"><h4>Bienestar y RPE (lo carga el jugador)</h4>${(()=>{const wl=S.checkins.filter(c=>c.player===id).sort(byDateDesc).slice(0,6);return wl.length?`<div class="mini">${wl.map(c=>c.kind==='well'?`<div><span>${fdy(c.date)} · Bienestar${c.painZone?' · dolor: '+esc(c.painZone):''}</span><span class="num">${WELL.map(w=>w[1][0]+(c[w[0]]??'–')).join(' ')} · ${wellTotal(c)}/20</span></div>`:`<div><span>${fdy(c.date)} · ${esc(c.activity||'')}</span><span class="num">RPE ${esc(c.rpe)}${isNum(c.minutes)?' · '+c.minutes+' min · '+Math.round(c.rpe*c.minutes)+' UA':''}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Todavía no cargó nada. Mandale su link.</div>'})()}</div>
+ <div class="det-sec"><h4>Bienestar y RPE (lo carga el jugador)</h4>${(()=>{const L=S.checkins.filter(c=>c.player===id).sort(byDateDesc).slice(0,6);return L.length?`<div class="mini">${L.map(c=>c.kind==='well'?`<div><span>${fdy(c.date)} · Bienestar${c.painZone?' · dolor: '+esc(c.painZone):''}</span><span>${WELL.map(w=>`${w[1]} <b class="num">${c[w[0]]??'–'}</b>`).join(' · ')} · <b class="num">${wellTotal(c)} de 20</b></span></div>`:`<div><span>${fdy(c.date)} · ${esc(c.activity||'')}</span><span>RPE <b class="num">${esc(c.rpe)}</b>${isNum(c.minutes)?` · ${c.minutes} min · carga <b class="num">${Math.round(c.rpe*c.minutes)}</b>`:''}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Todavía no cargó nada. Mandale su link.</div>'})()}</div>
  <div class="det-sec"><h4>Gimnasio</h4>${gr.length?`<div style="margin-bottom:8px;font-size:14px">Rutinas asignadas: ${gr.map(r=>`<button class="linkbtn" type="button" data-act="rsheet" data-id="${r.id}">${esc(r.name)}</button>`).join(' · ')}</div>`:''}${gl.length?`<div class="mini">${gl.map(g=>{const r=S.routines.find(x=>x.id===g.routine);return `<div><span>${fdy(g.date)} · ${esc(r?r.name:(g.done||'Gimnasio').split('\n')[0])}</span><span class="num" style="color:var(--muted)">${[isNum(g.duration)?g.duration+' min':'',isNum(g.rpe)?'RPE '+g.rpe:''].filter(Boolean).join(' · ')}</span></div>`}).join('')}</div>`:'<div style="color:var(--muted)">Sin registros de gimnasio.</div>'}</div>
- <div class="det-sec"><h4>Tests (${tests.length})</h4>${tests.length?`<div class="mini">${tests.map(t=>`<div><span>${esc(t.test)} · <span class="num" style="color:var(--muted)">${fdy(t.date)}</span></span><span class="num">${esc(t.value)} ${esc(t.unit||'')}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin mediciones.</div>'}</div>
+ <div class="det-sec"><h4>Tests · último resultado</h4>${TT.length?`<div class="mini">${TT.map(x=>`<div><span>${esc(x.a.test)} · <span class="num" style="color:var(--muted)">${fdy(x.a.date)}</span></span><span><b class="num">${esc(String(x.a.value).replace('.',','))} ${esc(x.a.unit||'')}</b> ${x.tr}</span></div>`).join('')}</div>${tests.length>TT.length?`<details class="miss"><summary>Ver todas las mediciones (${tests.length})</summary><div class="mini" style="margin-top:6px">${tests.map(t=>`<div><span>${esc(t.test)} · <span class="num" style="color:var(--muted)">${fdy(t.date)}</span></span><span class="num">${esc(t.value)} ${esc(t.unit||'')}</span></div>`).join('')}</div></details>`:''}`:'<div style="color:var(--muted)">Sin mediciones.</div>'}</div>
  <div class="det-sec"><h4>Lesiones (${inj.length})</h4>${inj.length?`<div class="mini">${inj.map(i=>`<div><span>${esc(i.zone||'')} ${i.kind?'· '+esc(i.kind):''} · <span class="num" style="color:var(--muted)">${fdy(i.date)}</span></span><span class="pill ${i.status==='Activa'?'warn':i.status==='Alta'?'ok':'amber'}">${esc(i.status||'')}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin lesiones registradas.</div>'}</div>
- <div class="formacts"><button class="btn" type="button" data-act="add" data-col="tests" data-pre="${id}">+ Test</button><button class="btn" type="button" data-act="add" data-col="injuries" data-pre="${id}">+ Lesión</button><button class="btn" type="button" data-act="add" data-col="gymlogs" data-pre="${id}">+ Gimnasio</button><button class="btn" type="button" data-act="plink" data-id="${id}">Link del jugador</button><button class="btn primary" type="button" data-act="edit" data-col="players" data-id="${id}">Editar ficha</button></div>`;
+ ${baja?`<div class="formacts"><button class="btn danger" type="button" data-act="del" data-col="players" data-id="${id}">Borrar definitivamente</button><button class="btn primary" type="button" data-act="preact" data-id="${id}">Reactivar</button></div>`
+ :`<div class="formacts"><button class="btn" type="button" data-act="add" data-col="tests" data-pre="${id}">+ Test</button><button class="btn" type="button" data-act="add" data-col="injuries" data-pre="${id}">+ Lesión</button><button class="btn" type="button" data-act="add" data-col="gymlogs" data-pre="${id}">+ Gimnasio</button><button class="btn" type="button" data-act="plink" data-id="${id}">Link del jugador</button><button class="btn primary" type="button" data-act="edit" data-col="players" data-id="${id}">Editar ficha</button></div>
+ <div class="formacts" style="margin-top:8px;border-top:0;padding-top:0"><button class="btn ghost" type="button" data-act="pbaja" data-id="${id}">Dar de baja</button></div>`}`;
+ hydrateMedia($('#mBody'));showModal();
+}
+const BAJA_MOT=['Se fue a otro club','Dejó de jugar','Pasó a otra categoría','Préstamo','Otro'];
+function openBaja(id){
+ const p=pl(id);if(!p)return;
+ $('#mTitle').textContent='Dar de baja';
+ $('#mBody').innerHTML=`<form class="form" id="bajaFrm" data-id="${id}" novalidate><p class="full" style="margin:0">${esc(p.name)} deja de aparecer en el plantel, la asistencia y las listas. Todo su historial queda guardado y se puede reactivar cuando quieras.</p>
+ <div class="fld"><label for="bj_date">Fecha</label><input id="bj_date" type="date" value="${today()}"></div>
+ <div class="fld"><label for="bj_mot">Motivo</label><select id="bj_mot">${BAJA_MOT.map(m=>`<option>${m}</option>`).join('')}</select></div>
+ <div class="fld full"><label for="bj_note">Nota</label><input id="bj_note" type="text" placeholder="Opcional. Ej: pasó a Club X"></div>
+ <div class="formacts"><button type="button" class="btn" data-act="player" data-id="${id}">Cancelar</button><button type="submit" class="btn primary">Dar de baja</button></div></form>`;
  showModal();
+}
+function savePlayer(id,patch,msg){
+ const p=pl(id);if(!p)return;const body={...p,...patch,editBy:me.uid,editAt:new Date().toISOString()};delete body.id;
+ setDoc(doc(db,'players',id),body).then(()=>{}).catch(err=>toast(errMsg(err)));toast(msg);
+}
+function doBaja(f){
+ const id=f.dataset.id;const p=pl(id);if(!p)return;
+ if(p.linkId)deleteDoc(doc(db,'plinks',p.linkId)).catch(()=>{});
+ savePlayer(id,{baja:$('#bj_date').value||today(),bajaMotivo:$('#bj_mot').value,bajaNota:$('#bj_note').value.trim(),linkId:''},'Jugador dado de baja');closeModal();
+}
+function playerList(){
+ const ps=sortedPlayers();const cols=[['N°',p=>isNum(p.number)?+p.number:''],['Apellido y nombre',p=>p.name||''],['DNI',p=>p.dni||''],['Nacimiento',p=>p.birth?fdy(p.birth):''],['Edad',p=>age(p.birth)??''],['Posición',p=>p.position||''],['Obra social',p=>p.health||''],['N° afiliado',p=>p.healthNum||''],['Apto médico',p=>p.apto?fdy(p.apto):''],['Celular',p=>p.phone||''],['Emergencia',p=>[p.contact,p.contactPhone].filter(Boolean).join(' · ')]];
+ return {ps,cols};
+}
+function exportPlayers(){
+ const {ps,cols}=playerList();
+ const html=`${sheetHead('Lista del plantel'+(squads().length>1?' · '+esc(sqName()):''))}<p class="sh-meta" style="margin:0 0 10px;font-size:13px;color:var(--muted)">${ps.length} jugadores · ${longDate(today())}</p><div class="tablewrap sh-table pl-exp"><table><thead><tr>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${ps.map(p=>`<tr>${cols.map(c=>`<td>${esc(c[1](p))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+ openDoc(html,`<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools"><button class="btn primary" type="button" data-act="pcsv">Descargar Excel</button><button class="btn" type="button" data-act="print">Descargar PDF</button></div></div>`);
+}
+function exportCSV(){
+ const {ps,cols}=playerList();const q=v=>{const s=String(v??'');return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+ const csv='﻿'+[cols.map(c=>q(c[0])).join(';'),...ps.map(p=>cols.map(c=>q(c[1](p))).join(';'))].join('\r\n');
+ try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=`plantel-${today()}.csv`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}catch(_){toast('No se pudo descargar el archivo.')}
 }
 
 /* ---------- formularios ---------- */
@@ -554,8 +663,11 @@ function fieldHTML(f,v){
  const id='f_'+f.k, req=f.req?'required':'', full=f.full?' full':'';
  let inp='';
  if(f.t==='textarea')inp=`<textarea id="${id}" name="${f.k}" ${req} placeholder="${esc(f.ph||'')}">${esc(v)}</textarea>`;
- else if(f.t==='select')inp=`<select id="${id}" name="${f.k}" ${req}><option value="">—</option>${f.opts.map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
- else if(f.t==='player')inp=`<select id="${id}" name="${f.k}" ${req}><option value="">Elegí un jugador</option>${sortedPlayers().map(p=>`<option value="${p.id}" ${p.id===v?'selected':''}>${isNum(p.number)?+p.number+' · ':''}${esc(p.name)}</option>`).join('')}</select>`;
+ if(f.t==='sec')return `<div class="fld full form-sec">${esc(f.l)}</div>`;
+ if(f.t==='image')return `<div class="fld full"><span class="lb">${f.l}</span>${imgField(id,v,f.k)}</div>`;
+ if(f.t==='squad'){const L=squads();if(L.length<2)return '';inp=`<select id="${id}" name="${f.k}">${L.map(x=>`<option value="${x.id}" ${(v||sq())===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`}
+ else if(f.t==='select')inp=`<select id="${id}" name="${f.k}" ${req}><option value="">${esc(f.blank||'—')}</option>${f.opts.map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+ else if(f.t==='player')inp=`<select id="${id}" name="${f.k}" ${req}><option value="">Elegí un jugador</option>${(v&&!S.players.some(p=>p.id===v)&&pl(v)?[pl(v),...sortedPlayers()]:sortedPlayers()).map(p=>`<option value="${p.id}" ${p.id===v?'selected':''}>${isNum(p.number)?+p.number+' · ':''}${esc(p.name)}</option>`).join('')}</select>`;
  else if(f.t==='routine')inp=`<select id="${id}" name="${f.k}"><option value="">Ninguna</option>${S.routines.filter(r=>f.kind==='Gimnasio'?isGym(r):!isGym(r)).map(r=>`<option value="${r.id}" ${r.id===v?'selected':''}>${esc(r.name)}</option>`).join('')}</select>`;
  else if(f.t==='rows'){const def=ROWDEF[f.k];const rows=Array.isArray(v)&&v.length?v:[{}];
   return `<div class="fld full"><span class="lb">${f.l}</span><div class="rows" data-rows="${f.k}">${rows.map((r,i)=>rowCard(f.k,r,i)).join('')}</div><div><button type="button" class="btn sm" data-act="rowadd" data-k="${f.k}">${def.add}</button></div>${f.k==='exercises'?libPickHTML():''}</div>`;}
@@ -602,7 +714,7 @@ function rowCard(key,r,i){
 function renumRows(box){box.querySelectorAll('[data-row] .rc-n').forEach((n,i)=>n.textContent=i+1)}
 let editing=null;
 function openForm(key,id,o={}){
- const sc=SCHEMA[key];const col=colOf(key);const src=id?S[col].find(x=>x.id===id):(o.copy?S[col].find(x=>x.id===o.copy):null);const d=id?src:null;
+ const sc=SCHEMA[key];const col=colOf(key);const src=id?R[col].find(x=>x.id===id):(o.copy?R[col].find(x=>x.id===o.copy):null);const d=id?src:null;
  if(['tests','injuries','gymlogs'].includes(col)&&!S.players.length){toast('Primero cargá al menos un jugador en Plantel.');return}
  editing={key,col,id};
  const defs={};
@@ -625,6 +737,8 @@ function openForm(key,id,o={}){
 function readForm(){
  const {key}=editing;const out={};const frm=$('#frm');
  for(const f of SCHEMA[key].fields){
+  if(f.t==='sec')continue;
+  if(f.t==='image'){const h=frm.querySelector(`.imgfld input[type=hidden][data-c="${f.k}"]`);out[f.k]=h?h.value:'';continue}
   if(f.t==='players'){out[f.k]=[...frm.querySelectorAll(`[data-group="${f.k}"] input:checked`)].map(c=>c.value);continue}
   if(f.t==='rows'){const def=ROWDEF[f.k];out[f.k]=[...frm.querySelectorAll(`[data-rows="${f.k}"] [data-row]`)].map(card=>{const r={};def.cols.forEach(c=>{let v=card.querySelector(`[data-c="${c.c}"]`).value.trim();if(c.t==='number'&&v!==''){v=Number(v.replace(',','.'));if(isNaN(v))v=''}if(c.t==='url'&&v&&!/^https?:\/\//i.test(v))v='https://'+v;r[c.c]=v});return r}).filter(r=>r.name);continue}
   const el=frm.elements[f.k];if(!el)continue;let v=el.value.trim();
@@ -639,9 +753,9 @@ function readForm(){
 function submitForm(e){
  e.preventDefault();if(!editing)return;const vals=readForm();if(!vals)return;
  const now=new Date().toISOString();const {key,col,id}=editing;const fixed=SCHEMA[key].fixed||{};let p;
- if(id){const old=S[col].find(x=>x.id===id)||{};const body={...old,...vals,...fixed,editBy:me.uid,editAt:now};delete body.id;p=setDoc(doc(db,col,id),body);
+ if(id){const old=R[col].find(x=>x.id===id)||{};const body={...old,...vals,...fixed,editBy:me.uid,editAt:now};delete body.id;p=setDoc(doc(db,col,id),body);
   if(col==='routines'&&old.shareId)setDoc(doc(db,'public',old.shareId),publicRoutine(body)).catch(()=>{})}
- else p=setDoc(doc(collection(db,col)),{...vals,...fixed,by:me.uid,at:now});
+ else{if((col==='players'||SQUAD_COLS.includes(col))&&!vals.squad)vals.squad=sq();p=setDoc(doc(collection(db,col)),{...vals,...fixed,by:me.uid,at:now})}
  p.catch(err=>toast(err&&err.code==='permission-denied'&&NEW_COLS.includes(col)?'Falta actualizar las reglas de Firebase para guardar esto.':errMsg(err)));
  if(key==='gymroutines'){const old=id?S[col].find(x=>x.id===id):null;const ids=new Set([...(vals.assigned||[]),...((old&&old.assigned)||[])]);setTimeout(()=>ids.forEach(pid=>{const pp=pl(pid);if(pp&&pp.linkId)syncPlink(pp)}),600)}
  closeModal();toast(navigator.onLine?(id?'Cambios guardados':'Guardado'):'Guardado en el teléfono. Se sincroniza cuando vuelva la señal.');
@@ -650,10 +764,10 @@ function showModal(){$('#modal').hidden=false;document.body.style.overflow='hidd
 function closeModal(){$('#modal').hidden=true;document.body.style.overflow='';editing=null}
 function del(btn){
  if(!btn.classList.contains('armed')){btn.classList.add('armed');btn.textContent='¿Confirmar?';setTimeout(()=>{btn.classList.remove('armed');btn.textContent='Borrar'},4000);return}
- const {col,id}=btn.dataset;const old=S[col]&&S[col].find(x=>x.id===id);
+ const {col,id}=btn.dataset;const old=R[col]&&R[col].find(x=>x.id===id);
  if(col==='routines'&&old&&old.shareId)deleteDoc(doc(db,'public',old.shareId)).catch(()=>{});
  if(col==='players'&&old&&old.linkId)deleteDoc(doc(db,'plinks',old.linkId)).catch(()=>{});
- deleteDoc(doc(db,col,id)).catch(err=>toast(errMsg(err)));toast('Borrado');closeDoc();if(col==='exercises')closeModal();
+ deleteDoc(doc(db,col,id)).catch(err=>toast(errMsg(err)));toast('Borrado');closeDoc();if(col==='exercises'||col==='players')closeModal();
 }
 
 /* ---------- planificación ---------- */
@@ -931,8 +1045,8 @@ function createYear(e){
  e.preventDefault();const p=gyRead();if(!p.trainDays.length){toast('Elegí al menos un día de entrenamiento.');return}
  const pl=gySum();if(!pl){toast('Revisá las fechas.');return}
  let nm=0,nc=0,skip=0;const fail=err=>{if(err&&err.code==='permission-denied')toast('Falta actualizar las reglas de Firebase para guardar la planificación.')};
- pl.mesos.forEach(m=>{if(S.mesos.some(v=>v.start===m.start&&v.end===m.end))return;setDoc(doc(collection(db,'mesos')),{...m,notes:''}).catch(fail);nm++});
- pl.micros.forEach(c=>{if(S.micros.some(v=>v.start<=c.end&&v.end>=c.start)){skip++;return}setDoc(doc(collection(db,'micros')),{...c,notes:''}).catch(fail);nc++});
+ pl.mesos.forEach(m=>{if(S.mesos.some(v=>v.start===m.start&&v.end===m.end))return;setDoc(doc(collection(db,'mesos')),{...m,notes:'',squad:sq()}).catch(fail);nm++});
+ pl.micros.forEach(c=>{if(S.micros.some(v=>v.start<=c.end&&v.end>=c.start)){skip++;return}setDoc(doc(collection(db,'micros')),{...c,notes:'',squad:sq()}).catch(fail);nc++});
  closeModal();tab='plan';saveGuide({matchDay:p.matchDay,match2:p.match2,trainDays:p.trainDays,time:p.time});
  toast(`Temporada armada: ${nm} mesociclos y ${nc} microciclos.`+(skip?` ${skip} semanas ya tenían microciclo y no se tocaron.`:''));window.scrollTo({top:0});
 }
@@ -969,7 +1083,7 @@ function gmRender(){
 function createGuideSessions(e){
  e.preventDefault();if(!GM)return;const now=new Date().toISOString();const time=$('#gmTime').value||'';let n=0;
  document.querySelectorAll('#gmFrm [data-gm]:checked').forEach(c=>{const r=GM.rows[+c.dataset.gm];if(!r)return;
-  setDoc(doc(collection(db,'sessions')),{date:r.date,time,...sessionFor(r.e,GM.per==='T'?'C':GM.per),routine:'',notes:'',by:me.uid,at:now}).catch(err=>toast(errMsg(err)));n++});
+  setDoc(doc(collection(db,'sessions')),{date:r.date,time,...sessionFor(r.e,GM.per==='T'?'C':GM.per),routine:'',notes:'',squad:sq(),by:me.uid,at:now}).catch(err=>toast(errMsg(err)));n++});
  if(!n){toast('Marcá al menos una sesión.');return}
  closeModal();toast(n===1?'Se creó 1 sesión.':`Se crearon ${n} sesiones.`);
 }
@@ -1293,6 +1407,12 @@ document.addEventListener('click',e=>{
  else if(a==='edit'){e.stopPropagation();let key=b.dataset.col;if(key==='routines'){const r=S.routines.find(x=>x.id===b.dataset.id);if(r&&isGym(r))key='gymroutines'}closeDoc();openForm(key,b.dataset.id)}
  else if(a==='dup'){closeDoc();openForm('sessions',null,{copy:b.dataset.id})}
  else if(a==='del'){e.stopPropagation();del(b)}
+ else if(a==='pbaja')openBaja(b.dataset.id);
+ else if(a==='sqadd'){const box=$('#sqList');box.insertAdjacentHTML('beforeend',sqRow({id:randId(6),name:''},box.children.length));box.lastElementChild.querySelector('input').focus()}
+ else if(a==='sqdel'){const r=b.closest('.sq-row'),id=r.dataset.sq;if(R.players.some(p=>p.squad===id)||R.sessions.some(x=>x.squad===id)){toast('Ese plantel tiene jugadores o sesiones: pasalos a otro plantel antes de quitarlo.');return}r.remove()}
+ else if(a==='preact'){savePlayer(b.dataset.id,{baja:'',bajaMotivo:'',bajaNota:''},'Jugador reactivado');closeModal()}
+ else if(a==='pexport')exportPlayers();
+ else if(a==='pcsv')exportCSV();
  else if(a==='sheet'){if(e.target.closest('.acts')&&b.classList.contains('row'))return;openSessionDoc(b.dataset.id)}
  else if(a==='rsheet'){openRoutineDoc(b.dataset.id)}
  else if(a==='att'){e.stopPropagation();openAtt(b.dataset.id)}
@@ -1362,6 +1482,8 @@ document.addEventListener('change',e=>{
  if(e.target.id==='gy_kind'){const i=$('#gy_pre');if(e.target.value==='short'){i.value=5;i.disabled=true}else i.disabled=false}
  if(e.target.closest('#gyFrm'))gySum();
  if(e.target.id==='gGps')saveGuide({gps:e.target.checked});
+ if(e.target.id==='squadSel'){curSquad=e.target.value;try{localStorage.setItem('ct_squad',curSquad)}catch(_){};derive();render();toast('Plantel: '+sqName())}
+ if(e.target.id==='plF'){plF=e.target.value;const l=$('#plList');if(l){l.innerHTML=plRows();hydrateMedia(l)}}
  if(['rc_base','rc_pre','rc_sh'].includes(e.target.id))rcInput(e.target);
  if(e.target.closest('#gmFrm')&&e.target.tagName==='SELECT')gmRender();
  if(e.target.id==='gymFilter'){gymFilter=e.target.value;render()}
@@ -1372,6 +1494,7 @@ document.addEventListener('input',e=>{
  const id=e.target.id||'';
  if(['rc_work','rc_pct','rc_rest','rc_try'].includes(id))rcInput(e.target);
  if(id.startsWith('ssg_')){SSGC[id.slice(4)]=e.target.value;const o=$('#ssgOut');if(o)o.innerHTML=ssgOutHTML()}
+ if(id==='plQ'){plQ=e.target.value;const l=$('#plList');if(l){l.innerHTML=plRows();hydrateMedia(l)}}
  if(id==='rm_kg'||id==='rm_reps'){RM[id.slice(3)]=e.target.value;const o=$('#rmOut');if(o)o.innerHTML=rmOutHTML()}
 });
 document.addEventListener('submit',e=>{
@@ -1384,6 +1507,8 @@ document.addEventListener('submit',e=>{
  if(id==='gmFrm')return createGuideSessions(e);
  if(id==='wellFrm'){e.preventDefault();return sendCheckin('well')}
  if(id==='rpeFrm'){e.preventDefault();return sendCheckin('rpe')}
+ if(id==='bajaFrm'){e.preventDefault();doBaja(e.target);return}
+ if(id==='sqFrm'){e.preventDefault();saveSquads();return}
  if(id==='clubFrm'){e.preventDefault();const name=$('#clubIn').value.trim();if(!name){toast('Escribí el nombre del equipo.');return}
   document.activeElement&&document.activeElement.blur();
   setDoc(doc(db,'config','club'),{...club,name,editBy:me.uid,editAt:new Date().toISOString()}).catch(err=>toast(errMsg(err)));toast('Nombre del equipo actualizado')}
