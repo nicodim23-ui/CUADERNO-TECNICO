@@ -262,7 +262,9 @@ export const PLIO_RULES=[
  'Calidad antes que cantidad: cada salto a máxima intención y con pausa completa (45–90 segundos entre series).',
  'Volumen de referencia por sesión: 40–60 contactos al empezar, 60–100 en nivel intermedio. Una o dos veces por semana.',
  'Primero se aprende a aterrizar y después a saltar. No se pasa de nivel si el aterrizaje no es estable.',
- 'En semana de competencia va en el día de fuerza (MD-4 o MD-5), nunca el día previo al partido con saltos con caída.'];
+ 'En semana de competencia va en el día de fuerza (MD-4 o MD-5), nunca el día previo al partido con saltos con caída.',
+ 'Saltos con caída: alturas bajas (20–40 cm) para empezar y medias (40–60 cm) en jugadores con buena base. Para elegir la altura, subir de a 20 cm hasta que el salto deje de superar al CMJ: esa es la altura de trabajo.',
+ 'Como referencia, no más de 30–40 saltos con caída por sesión, una o dos veces por semana. En la caída, el talón no golpea el piso y el contacto es corto.'];
 
 /* ---------- evaluaciones ---------- */
 export const TESTS=[
@@ -277,11 +279,11 @@ export const TESTS=[
  {g:'Velocidad y cambio de dirección',when:'Inicio y fin de pretemporada; después, cada 6–8 semanas',items:[
   ['Sprint 10 m','s','Aceleración.'],['Sprint 30 m, con parciales a 10 y 20 m','s',''],['Velocidad máxima (20 m lanzados o GPS)','km/h','Referencia para medir la exposición semanal a sprint.'],['5-0-5 o T-test','s','Cambio de dirección, hacia los dos lados.']]},
  {g:'Resistencia',when:'Inicio y fin de pretemporada, y a mitad de temporada',items:[
-  ['30-15 IFT','km/h','La velocidad final sirve para dosificar los intermitentes.'],['Yo-Yo IR1 (IR2 en planteles muy entrenados)','m','Elegir uno de los dos tests y repetir siempre el mismo.'],['RSA: 6 × 30 m con 20 s de pausa','s','Promedio y caída entre el mejor y el peor sprint.']]},
+  ['30-15 IFT','km/h','La velocidad final sirve para dosificar los intermitentes.'],['VAM (test de pista o Cooper)','km/h','Para dosificar las pasadas por distancia (800, 600, 300 m…). Con el Cooper se estima: la VAM es un 5–10 % más rápida que el ritmo medio del test.'],['Yo-Yo IR1 (IR2 en planteles muy entrenados)','m','Elegir uno de los dos tests y repetir siempre el mismo.'],['RSA: 6 × 30 m con 20 s de pausa','s','Promedio y caída entre el mejor y el peor sprint.']]},
  {g:'Movilidad y prevención',when:'Inicio de pretemporada y al volver de una lesión',items:[
   ['Dorsiflexión de tobillo (rodilla a la pared)','cm','Comparar lado a lado.'],['Flexibilidad de isquiotibiales (extensión activa de rodilla)','grados',''],['Test de Thomas (flexores de cadera)','—',''],['Saltos a una pierna (hop tests)','cm','Criterio para volver al campo después de una lesión.']]}
 ];
-export const TEST_NAMES=['Peso','Talla','Suma de 6 pliegues','% grasa','Sentadilla (máximo estimado)','Hip thrust (máximo estimado)','Nordic','Aductores (apretar)','CMJ','SJ','Salto a una pierna derecha','Salto a una pierna izquierda','Salto horizontal','Sprint 10 m','Sprint 20 m','Sprint 30 m','Velocidad máxima','5-0-5','T-test','30-15 IFT','Yo-Yo IR1','Yo-Yo IR2','RSA 6×30 m (promedio)','Tobillo: rodilla a la pared'];
+export const TEST_NAMES=['Peso','Talla','Suma de 6 pliegues','% grasa','Sentadilla (máximo estimado)','Hip thrust (máximo estimado)','Nordic','Aductores (apretar)','CMJ','SJ','Salto a una pierna derecha','Salto a una pierna izquierda','Salto horizontal','Sprint 10 m','Sprint 20 m','Sprint 30 m','Velocidad máxima','5-0-5','T-test','30-15 IFT','VAM','Cooper (12 min)','Yo-Yo IR1','Yo-Yo IR2','RSA 6×30 m (promedio)','Tobillo: rodilla a la pared'];
 
 /* ---------- datos a registrar ---------- */
 export const DATA=[
@@ -296,7 +298,7 @@ export const DATA=[
 
 /* ---------- plantillas de sesión ---------- */
 const X={
- w1:{part:'Entrada en calor',name:'Activación, movilidad y prevención',time:15,space:'Media cancha',org:'Todo el grupo',desc:'Movilidad dinámica 5 min\nPrevención: Copenhagen, puente de glúteo y core (2 × 8–10)\nTécnica de carrera y 3 progresiones de 30 m',mat:''},
+ w1:{part:'Entrada en calor',name:'Entrada en calor en 4 pasos',time:15,space:'Media cancha',org:'Todo el grupo',desc:'1. Rodillo: 2 × 10–15 s en al menos 3 grupos musculares\n2. Estiramientos dinámicos: 3 ejercicios, 2 × 10\n3. Activación de cadera con banda: lateral y hacia adelante 2 × 10, plancha 5–10 s y Copenhagen\n4. Core: 2 × 6–10\nTécnica de carrera y 3 progresiones de 30 m',mat:'Rodillos, bandas'},
  wm:{part:'Entrada en calor',name:'Movilidad general',time:10,space:'Media cancha',org:'Todo el grupo',desc:'Movilidad articular y activación suave',mat:''},
  cool:{part:'Vuelta a la calma',name:'Elongación y charla',time:8,space:'',org:'Todo el grupo',desc:'Elongación suave. Cada jugador carga su RPE desde su link.',mat:''},
  gymF:{part:'Parte principal',name:'Gimnasio: fuerza',time:35,space:'Gimnasio',org:'2–3 grupos por estación',desc:'',mat:'Barras, discos, mancuernas'},
@@ -396,8 +398,10 @@ export function weekLayout({period='C',matchDay=0,match2=-1,trainDays=[1,2,3,4,5
  return out;
 }
 
+const SHORT_FOCUS=['Pretemporada corta · Adaptación y evaluaciones. Fuerza en circuito, intermitentes suaves y juegos de posesión','Pretemporada corta · Carga: fuerza 2 veces, velocidad 2 veces (100–160 m), resistencia de capacidad y de potencia','Pretemporada corta · Semana de más volumen. Último bloque fuerte de resistencia aeróbica','Pretemporada corta · Específica: intensidad alta, modelo de juego y amistoso','Pretemporada corta · Ajuste: baja el volumen, se mantiene la intensidad y se repiten las evaluaciones'];
 /** Arma mesociclos y microciclos de todo el año. */
-export function planYear({start,preWeeks=6,seasonEnd,transWeeks=4,matchDay=0,match2=-1}){
+export function planYear({start,preWeeks=6,seasonEnd,transWeeks=4,matchDay=0,match2=-1,short=false}){
+ if(short)preWeeks=5;
  let end=start;while(weekday(end)!==matchDay)end=addDays(end,1);if(diff(start,end)<3)end=addDays(end,7);
  const micros=[];let s=start,e=end;const g=Math.ceil(preWeeks/2);const day=DAYS[matchDay].toLowerCase();
  const next=()=>{s=addDays(e,1);e=addDays(s,6)};
@@ -405,6 +409,7 @@ export function planYear({start,preWeeks=6,seasonEnd,transWeeks=4,matchDay=0,mat
   const gen=i<=g,w=gen?i:i-g,lastG=i===g,lastE=i===preWeeks;
   micros.push(gen?{start:s,end:e,gperiod:'PG',gweek:w,type:w===1?'Ordinario':lastG?'Impacto':'Carga',match:'',focus:w===1?'Evaluaciones iniciales y adaptación. Volumen en subida':lastG?'Semana de mayor volumen de la pretemporada':'Volumen alto: resistencia aeróbica y fuerza base'}
    :{start:s,end:e,gperiod:'PE',gweek:w,type:lastE?'Ajuste':w===1?'Carga':'Impacto',match:'Amistoso el '+day,focus:lastE?'Puesta a punto: baja el volumen y se mantiene la intensidad. Repetir evaluaciones':'Intensidad alta, modelo de juego y amistoso'});
+  if(short)micros[micros.length-1].focus=SHORT_FOCUS[i-1];
   next();
  }
  let c=0;const md=DAYS[matchDay].toLowerCase()+(match2>=0&&match2!==matchDay?' y '+DAYS[match2].toLowerCase():'');
@@ -418,3 +423,178 @@ export function planYear({start,preWeeks=6,seasonEnd,transWeeks=4,matchDay=0,mat
  add('Transición','Transición',of('T'),'T');
  return {mesos,micros,firstMatch:comp[0]?comp[0].end:null,compWeeks:c,preEnd:micros[preWeeks-1]?micros[preWeeks-1].end:null};
 }
+
+/* ---------- fuerza en campo, sin gimnasio ---------- */
+GYM.push({period:'X',title:'Fuerza en campo, sin gimnasio',freq:'1–2 veces por semana, cuando no hay gimnasio',when:'El día de fuerza (MD-4, o MD-5 si hay sesión ese día). En pretemporada, 2 veces por semana',goal:'Fuerza con el peso del cuerpo, bandas, compañero y trineo. Cargas medias y bajas movidas a la mayor velocidad posible, organizadas en islas o en circuito.',routines:[
+ {name:'Guía · Fuerza en campo por islas',category:'Fuerza',duration:35,indications:'Medio plantel en cada isla y cambio a los 15–20 minutos. El número entre paréntesis es hasta dónde progresar las repeticiones en las semanas siguientes.\nMáxima intención en cada repetición; cortar la serie si se pierde la técnica.',exercises:[
+  ...blk('Isla 1',x('Sentadilla búlgara','3','4 (hasta 8) por pierna','Peso corporal o mochila','60 s'),x('Flexiones de brazos','3','6–8 (hasta 10)','Con chaleco o mochila','60 s'),x('Plancha frontal','3','20–30 s','Peso corporal','30 s'),x('Puente de glúteo a una pierna','3','6 (hasta 12) por pierna','Peso corporal','45 s'),x('Remo con banda o TRX','3','8 (hasta 12)','Banda fuerte','60 s'),x('Salto con caída desde cajón bajo','3','5','30 cm','90 s','Contacto corto y salto máximo'),x('Estocada lateral','3','4 (hasta 8) por lado','Peso corporal','45 s'),x('Movilidad de cadera y tobillo','1','10','—','—')),
+  ...blk('Isla 2',x('Arrastre de trineo','4','15 m','≈ 20 % del peso corporal','90 s','Inclinación de 45°, empujar el piso hacia atrás'),x('Plancha lateral','3','20 s por lado','Peso corporal','30 s'),x('Salto horizontal a una pierna','3','4 por pierna','Peso corporal','60 s'),x('Tracción o empuje con banda o compañero','3','8 (hasta 12)','Banda fuerte','60 s'),x('Sprint de 20 m o cambio de dirección','4','1','Máxima velocidad','90 s'),x('Copenhagen o nórdico con compañero','2','10–12 (hasta 15)','Peso corporal','60 s','En el nórdico, 3–5 repeticiones lentas'),x('Movilidad general','1','10','—','—'))]},
+ {name:'Guía · Circuito de fuerza en campo (8 estaciones)',category:'Fuerza',duration:30,indications:'30 s de trabajo y 30 s para cambiar de estación. 2–3 vueltas con 2–3 min de pausa entre vueltas.\nDosis inicial: en la primera sesión, cada jugador hace el máximo de repeticiones correctas en 60 s en cada estación. Después trabaja con la mitad de esas repeticiones en 30 s.\nProgresión: primero más repeticiones por estación, después más vueltas y por último menos pausa.\nLas estaciones van alternando piernas, brazos y zona media para que dos seguidas no carguen lo mismo.',exercises:[
+  ...blk('Fuerza principal',x('1. Sentadilla con salto','2–3','Mitad del test','Peso corporal','30 s'),x('2. Flexiones de brazos','2–3','Mitad del test','Peso corporal','30 s'),x('3. Puente de glúteo a una pierna','2–3','Mitad del test','Peso corporal','30 s'),x('4. Remo invertido (TRX, banda o compañero)','2–3','Mitad del test','Peso corporal','30 s'),x('5. Zancada hacia atrás alternada','2–3','Mitad del test','Peso corporal','30 s'),x('6. Plancha con toque de hombro','2–3','Mitad del test','Peso corporal','30 s'),x('7. Nórdico con compañero','2–3','3–5','Peso corporal','30 s','Lento en la bajada'),x('8. Copenhagen','2–3','6–8 por lado','Peso corporal','30 s'))]}]});
+
+/* ---------- 1RM y zonas de carga ---------- */
+export const est1RM=(kg,reps)=>reps<=1?kg:kg/(1.0278-0.0278*reps);
+export const GYM_ZONES=[
+ ['Fuerza máxima (vía nerviosa)','85–100 %','1–5','Largas (3–5 min)','Pocas repeticiones, mucha intención. Es la que más dura en el tiempo: con una sesión por semana se mantiene.'],
+ ['Fuerza e hipertrofia','70–85 %','6–10','2–3 min','Más volumen. Útil en pretemporada general; en temporada, con cuidado porque deja más dolor muscular.'],
+ ['Potencia','30–60 %','3–6','2–3 min','La mayor potencia aparece con cargas de 30–40 % movidas a la máxima velocidad. Cortar la serie cuando baja la velocidad.'],
+ ['Contraste','Pesada 60–80 % + liviana 30–50 % o salto','3–5 + 3–5','2–3 min','Alternar una serie pesada con una liviana o un salto explosivo. Transfiere la fuerza a la velocidad.'],
+ ['Isométricos','Alta tensión','5–6 tensiones de 6–8 s','10–15 s','Complemento: mantener fuerza, trabajar un ángulo débil o empezar una readaptación. No más del 10 % del trabajo de fuerza.'],
+ ['Excéntricos','Supramáxima o lenta','3–6','2–3 min','Dejan más dolor muscular: una vez por semana y lejos del partido.']];
+
+/* ---------- resistencia e intermitentes ---------- */
+export const RES_MIX=[
+ {name:'Juegos reducidos',share:70,what:'La mayor parte del trabajo de resistencia. La carga física llega sin sacar la pelota.',when:'Todo el año. El formato y el tamaño cambian según el día (ver Juegos reducidos).'},
+ {name:'Intermitentes cortos',share:20,what:'Pasadas de 10 a 30 s con pausas iguales o del doble. Se dosifican por jugador con su test.',when:'Para completar a los que jugaron poco, suplentes, vuelta de lesión y algunos días de pretemporada.'},
+ {name:'Sprints repetidos',share:5,what:'Sprints de 5–6 s con pausas cortas.',when:'Final de la pretemporada, suplentes y final de la readaptación.'},
+ {name:'Intervalos largos',share:5,what:'Pasadas de 2 a 4 minutos.',when:'Solo en pretemporada, al final de la sesión y antes de un día libre.'}];
+export const RES_RULES=[
+ 'Primero se define qué se busca en el día (fuerza, resistencia o velocidad) y después se elige el formato. El trabajo físico se adapta a la parte técnica y táctica, no al revés.',
+ 'Si la parte con pelota ya tuvo muchos frenos y giros, el intermitente va en línea recta. Si ya tuvo mucha carrera larga, se elige un juego reducido chico o intermitentes con cambios de dirección.',
+ 'Los intermitentes de carrera van siempre al final de la sesión. Los juegos, entre las tareas técnicas o tácticas.',
+ 'Línea recta: más carrera a alta velocidad. Ida y vuelta o zigzag: más frenos y aceleraciones. Los giros de 45° son los que menos cargan los músculos.',
+ 'Los intermitentes se pueden hacer con pelota: pase y carrera, carrera y remate, o recorridos que imitan la posición de cada uno.',
+ 'Los arqueros no hacen el trabajo de carrera de los jugadores de campo.'];
+export const RES_WEEK=[
+ ['MD+1','Suplentes y los que jugaron poco: compensatorio según los días hasta el próximo partido (tabla de abajo). Los que jugaron, nada.'],
+ ['MD-4 · fuerza','4v4 con arqueros: 4–6 × 3–4 min. Si hace falta más, intermitente corto con cambios de dirección al final.'],
+ ['MD-3 · resistencia','6v6 u 8v8 en bloques largos (más de 8 min en 6v6, más de 15 min en 8v8). O intermitente 15/15 o 10/20 en línea recta al final.'],
+ ['MD-2 · velocidad','10v10 en cancha larga. Nada de intermitentes.'],
+ ['MD-1','Nada.'],
+ ['Pretemporada, primeros días','6v6 u 8v8 de posesión e intermitentes suaves para los músculos: 10 s al 90 % / 10 s con giros de 45°, o 20 s al 85 % / 10 s en línea recta.'],
+ ['Pretemporada, antes del día libre','Intervalos largos al final de la sesión: 3–5 × 3 min al 80 % del 30-15 IFT, 2 min de pausa, en un circuito de unos 300 m por grupos de velocidad.']];
+export const SUBS=[
+ {d:'5 días o más',a:'Juego reducido 5v5 con arqueros: 3–5 × 3–4 min.',b:'Intermitente: 2 × 4–6 min de 10 s al 110 % / 20 s de pausa, en línea recta.'},
+ {d:'3 o 4 días',a:'5v5 con arqueros: 3–4 × 2–3 min. O intermitente 2 × 4 min de 15 s al 95 % / 15 s, con pase y remate.',b:'Velocidad: 4–6 progresiones de 40–60 m hasta el 90–95 % de la velocidad máxima, con 45 s o más de pausa.'},
+ {d:'2 días',a:'Intermitente suave: 1 × 4 min de 10 s al 105 % / 20 s, con giros de 45°.',b:'Velocidad: 4 progresiones de 40 m hasta el 90–95 % de la velocidad máxima.'}];
+export const SUBS_NOTE='Para los que no jugaron o jugaron menos de 35 minutos. Los que jugaron más de 60 minutos solo hacen la parte con pelota del día. Entre 35 y 60 minutos, decidir según cómo llegan (bienestar y RPE). Ejemplo de compensatorio completo para reemplazar un partido de unos 60 minutos (sin la entrada en calor): 8v8 de posesión 2 × 10 min, 4v4 con 2 arqueros 4 × 4 min e intermitente 15/15 durante 6 min.';
+export const RES_TOGETHER=[
+ 'Fuerza y resistencia se estorban si se buscan al máximo las dos a la vez. Lo que más le quita a la fuerza y a la velocidad es la carrera continua larga: por eso en fútbol la resistencia se trabaja con juegos e intermitentes.',
+ 'Separarlas: lo ideal es en días distintos. Si van el mismo día, primero velocidad y fuerza, y la resistencia al final.',
+ 'En temporada, la fuerza con pocas repeticiones a máxima velocidad interfiere menos que la de mucho volumen.',
+ 'Lo que más dura después de entrenarlo es la fuerza máxima y la base aeróbica; lo que más rápido se pierde es la velocidad. Velocidad todas las semanas; fuerza, al menos una vez por semana.'];
+export const RES_CONT=[
+ ['Trote regenerativo','20–40 min a ritmo de charla','Día después del partido para los que jugaron, transición.'],
+ ['Carrera continua media','20–30 min al 70–80 % de la VAM','Primeras semanas de la pretemporada y transición.'],
+ ['Fartlek','20–30 min cambiando de ritmo: trote, progresiones, cambios y sprints cortos','Transición y comienzo de la pretemporada. Rompe la monotonía.'],
+ ['Cuestas largas','6–10 × 300 m de pendiente suave, bajando al trote','Pretemporada general: resistencia y fuerza de piernas a la vez.']];
+
+/* calculadora de pasadas: presets */
+export const RC_PRESETS=[
+ {id:'i10-20',base:'ift',mode:'time',work:10,rest:'20 s',pct:110,reps:'2 × 4–6 min',label:'10 s / 20 s al 110 % (línea recta)'},
+ {id:'i15-15',base:'ift',mode:'time',work:15,rest:'15 s',pct:95,reps:'2 × 6 min',label:'15 s / 15 s al 95 %'},
+ {id:'i20-20',base:'ift',mode:'time',work:20,rest:'20 s',pct:95,reps:'1–2 × 4 min',label:'20 s / 20 s al 95 %'},
+ {id:'i30-30',base:'ift',mode:'time',work:30,rest:'30 s',pct:90,reps:'2 × 6 min',label:'30 s / 30 s al 90 %'},
+ {id:'i10-20c',base:'ift',mode:'time',work:10,rest:'20 s',pct:105,turn:45,reps:'1 × 4 min',label:'10 s / 20 s al 105 % con giros de 45°'},
+ {id:'i10-10s',base:'ift',mode:'time',work:10,rest:'10 s',pct:90,turn:45,reps:'2 × 5 min',label:'10 s / 10 s al 90 % con giros de 45° (inicio de pretemporada)'},
+ {id:'i20-10s',base:'ift',mode:'time',work:20,rest:'10 s',pct:85,reps:'2 × 5 min',label:'20 s / 10 s al 85 % (inicio de pretemporada)'},
+ {id:'ilong',base:'ift',mode:'time',work:180,rest:'2 min',pct:80,reps:'3–5 repeticiones',label:'Intervalo largo: 3 min al 80 % (solo pretemporada)'},
+ {id:'v600',base:'vam',mode:'dist',work:600,rest:'2–3 min',pct:87,reps:'5–6 repeticiones',label:'Capacidad: 600 m al 85–90 % de la VAM'},
+ {id:'v800',base:'vam',mode:'dist',work:800,rest:'2–3 min',pct:80,reps:'3–4 repeticiones',label:'Capacidad: 800 m al 80 % de la VAM'},
+ {id:'v300',base:'vam',mode:'dist',work:300,rest:'1:1',pct:115,reps:'6–10 repeticiones',label:'Potencia: 300 m al 110–120 % de la VAM'},
+ {id:'v200',base:'vam',mode:'dist',work:200,rest:'1:1',pct:125,reps:'4–6 repeticiones',label:'Potencia: 200 m al 120–130 % de la VAM'},
+ {id:'v100',base:'vam',mode:'dist',work:100,rest:'1:1',pct:110,reps:'10 repeticiones',label:'Potencia: 100 m al 110 % de la VAM'},
+ {id:'v75',base:'vam',mode:'dist',work:75,rest:'1:1',pct:115,reps:'10 × (25 + 25 + 25 m)',label:'Potencia: 3 tramos de 25 m (75 m) al 115 %'},
+ {id:'v50',base:'vam',mode:'dist',work:50,rest:'1:1',pct:130,reps:'5–10 repeticiones',label:'Potencia: 50 m al 130 %, pausa igual al trabajo'},
+ {id:'v25',base:'vam',mode:'dist',work:25,rest:'1:2',pct:130,reps:'10 repeticiones',label:'Potencia: 25 m al 130 %, pausa del doble'}];
+export const RC_TURN_S=0.7;
+/** Distancia para un tiempo dado. v en km/h, pct en %, t en s, shuttle en m (0 = línea recta). */
+export function rcDist(v,pct,t,shuttle=0){
+ const ms=v/3.6*pct/100;let d=ms*t;
+ if(shuttle>0){for(let k=0;k<6;k++){const n=Math.floor(d/shuttle-1e-9);d=ms*Math.max(0,t-n*RC_TURN_S)}}
+ return d;
+}
+export const rcTime=(v,pct,d)=>d/(v/3.6*pct/100);
+
+/* ---------- juegos reducidos ---------- */
+export const SSG=[
+ {f:'1v1 a 3v3',m2:'50–100',ex:'3v3 en 25×20 m',day:'MD-4, en bloques muy cortos',work:'4–6 × 1–2 min',rest:'2–3 min',fx:'Duelos, frenos y aceleraciones. Exigencia muscular y cardíaca muy alta, casi nada de carrera larga.'},
+ {f:'4v4 o 5v5 con arqueros',m2:'75–120',ex:'4v4 + 2 arqueros en 30×25 m',day:'MD-4 · fuerza',work:'4–6 × 3–4 min',rest:'2 min',fx:'Muchas aceleraciones y frenos. Los jugadores se recuperan para el día siguiente.'},
+ {f:'6v6 o 7v7',m2:'100–150',ex:'6v6 en 45×35 m',day:'MD-3 · resistencia',work:'3–4 × 8–10 min',rest:'2 min',fx:'Exigencia aeróbica alta con algo de carrera rápida. Bloques de más de 8 minutos.'},
+ {f:'8v8 o 9v9',m2:'150–220',ex:'8v8 + arqueros en 60×50 m',day:'MD-3 · resistencia',work:'2–3 × 12–15 min',rest:'2–3 min',fx:'Resistencia de juego. Bloques de más de 15 minutos.'},
+ {f:'10v10 u 11v11',m2:'220–320',ex:'10v10 en 3/4 de cancha, más larga que ancha (más de 60 m)',day:'MD-2 · velocidad',work:'3–4 × 6–8 min',rest:'2–3 min',fx:'Carreras largas y a alta velocidad, sprints. Pocos frenos.'}];
+export const SSG_VARS=[
+ ['Más espacio por jugador','Más carrera y más velocidad. Menos espacio: más frenos, giros y duelos.'],
+ ['Cancha más larga que ancha','Más carreras largas y a alta velocidad.'],
+ ['Con arcos y arqueros','Más intenso que la posesión sin arcos, que pide menos carrera y menos esfuerzo.'],
+ ['Comodines','El que hace de comodín corre y se esfuerza menos que el resto: rotarlo, y no ponerlo en el jugador que necesita carga.'],
+ ['Apoyos por fuera y toques libres','Bajan la exigencia. Limitar los toques o marcar hombre a hombre la sube.'],
+ ['Bloques y pausas','Bloques cortos con pausa: más intensidad por minuto. Bloques largos: más resistencia.'],
+ ['Reposición y aliento','Pelotas listas alrededor de la cancha y un entrenador que alienta mantienen alta la intensidad.']];
+export const SSG_NOTE='Los metros cuadrados por jugador se calculan con los jugadores de campo, sin contar arqueros. Un partido 11v11 en una cancha de 105×68 m da unos 350 m² por jugador.';
+
+/* ---------- velocidad ---------- */
+export const SPEED_DOSE=[
+ {t:'Aceleración',dist:'10–30 m (hasta 50)',int:'Máxima (más del 98 %)',rest:'1–5 min (1 min cada 10 m)',vol:'100–300 m',next:'36–48 h',start:'De 3 apoyos, agachado, en caída, tras una señal'},
+ {t:'Velocidad máxima',dist:'10–30 m lanzados, después de 20–40 m de aceleración',int:'Máxima (más del 98 %)',rest:'1–3 min, más si baja la calidad',vol:'50–150 m',next:'36–48 h',start:'Lanzada'},
+ {t:'Sprint resistido',dist:'10–30 m',int:'La carga baja la velocidad al 80–95 %',rest:'1–3 min',vol:'50–200 m',next:'48 h',start:'De 3 apoyos o agachado'},
+ {t:'Sprint asistido',dist:'10–30 m lanzados',int:'Hasta el 105 %',rest:'1–3 min',vol:'Hasta 100 m',next:'48 h',start:'Lanzada'},
+ {t:'Resistencia a la aceleración',dist:'5 × 20 m, 4 × 30 m, 3 × 40 m, 2 × 50 m',int:'Máxima',rest:'30 s, 1 min, 1 min 30 s y 2 min; 5 min entre series',vol:'360 m',next:'48 h',start:'Pretemporada específica'},
+ {t:'Entradas y salidas',dist:'3 × 400 m alternando 25 m acelerando y 50 m soltando',int:'Máxima en los tramos de 25 m',rest:'5 min',vol:'1200 m',next:'48 h',start:'Pretemporada'}];
+export const SPEED_MEANS=[
+ ['Trineo','Aceleración (empuje hacia adelante)','Liviano (5–10 % del peso corporal) no cambia la técnica. Con más carga (cerca del 20 %) se trabaja la fuerza de empuje. Es el más estudiado.'],
+ ['Cuesta arriba','Aceleración y fuerza de cadera y rodilla','Pendiente de 3–8°, 20–30 m. Ayuda a la técnica: rodillas arriba y apoyo de metatarso. Cuestas cortas y empinadas: 6–10 repeticiones con 2–5 min de pausa.'],
+ ['Chaleco o cinturón lastrado','Velocidad máxima (empuje hacia arriba)','Cargas bajas o medias, cerca del centro del cuerpo.'],
+ ['Goma o compañero que frena','Aceleración','Fácil de armar, difícil de dosificar igual para todos.'],
+ ['Arena','Aceleración y fuerza de pie y tobillo','Baja transferencia y difícil de dosificar. Para variar.'],
+ ['Cuesta abajo suave o goma que tira','Frecuencia de paso y velocidad máxima','Pendiente de 3–6°. Si el jugador frena o apoya el talón, la pendiente es demasiada.'],
+ ['Paracaídas','Poco claro','La carga casi no se puede ajustar. Poco estudiado.']];
+export const SPEED_NOTE='Los sprints resistidos y asistidos no mejoran la velocidad más que el sprint común, pero suman variedad y estímulo: se combinan con él, no lo reemplazan.';
+export const SPEED_TECH=[
+ ['Postura','Alta, con cabeza, columna y cadera alineadas.'],
+ ['Piernas','Tobillo con la punta hacia arriba. Al apoyar, la tibia vertical y el pie debajo del cuerpo. La rodilla sube hacia adelante.'],
+ ['Aceleración','Cuerpo inclinado hacia adelante (cerca de 45°) y pasos que empujan el piso hacia atrás. Se enseña con pared, bandas, trineo o compañero.'],
+ ['Cómo enseñar','Primero ejercicios sin decisión, de lo quieto a lo dinámico y de lo fácil a lo difícil. Un objetivo por vez y palabras clave: “empujá el piso”, “rompé la pared con la rodilla”. Marchas y skipping para unir el tronco con las piernas. Mostrar bien y, si se puede, filmar.']];
+export const SPEED_MULTI=[
+ ['Posición básica','Columna neutra, pies más abiertos que la cadera, peso en el medio del pie y centro de gravedad bajo.'],
+ ['Desplazamiento lateral','Bajo, pies al ancho de la cadera. Empuja la pierna de afuera; la de adentro acompaña debajo del hombro. Poco tiempo en el aire.'],
+ ['Paso cruzado','Empuja la pierna de adentro desde el borde del pie y la de afuera cruza rápido por delante. Hombros y brazos giran al revés que la cadera.'],
+ ['Paso abierto y paso atrás','Para salir hacia un costado o hacia atrás sin perder tiempo: abrir la cadera hacia donde se va.'],
+ ['Frenar','Bajar el centro de gravedad en los últimos pasos y apoyar adelante del cuerpo. Es lo que más carga la rodilla: se entrena como la fuerza.'],
+ ['Progresión','Primero sin decisión (el jugador sabe qué hacer y sale cuando quiere), después con una señal (sonido, color) y al final con estímulos del juego: pelota, compañero o rival.']];
+export const SPEED_BALL=[
+ ['Reacción con pelota','Un jugador de espaldas recibe un pase que no ve venir y descarga a un toque en menos de 1–2 s. Variantes: avisar o no hacia dónde, cambiar la altura del pase, sumar un defensor.'],
+ ['Aceleración por la pelota','Acelerar para cortar un pase entre dos compañeros, o desmarcarse al trote y acelerar para recibir en profundidad y rematar.'],
+ ['Aceleración, giro y freno','Acelerar, girar en un cono, frenar en una zona de 1 m y descargar. En grupo: todos aceleran, frenan y se acomodan para defender un centro.']];
+export const SPEED_PRINCIPLES=[
+ 'Todo el año, aunque sea en dosis chicas: la velocidad es lo primero que se pierde cuando no se entrena.',
+ 'Siempre fresco, después de una buena entrada en calor y al principio de la parte principal.',
+ 'A máxima intensidad: correr al 80 % enseña a correr al 80 %.',
+ 'Pausas largas. Cortar la serie si el tiempo empeora.',
+ 'De lo simple a lo complejo y de lo corto a lo largo.',
+ 'Una buena base aeróbica ayuda a recuperar entre sprints.'];
+
+/* ---------- entrada en calor ---------- */
+export const WARMUP=[
+ {n:1,t:'Rodillo',min:4,dose:'2 × 10–15 s por grupo muscular, al menos 3 grupos (lo ideal, todos)',ex:'Gemelos, cuádriceps, isquiotibiales, aductores, glúteos y espalda'},
+ {n:2,t:'Estiramientos dinámicos',min:4,dose:'2 × 10 repeticiones de al menos 3 ejercicios',ex:'Zancada con giro de tronco, balanceos de pierna, sentadilla profunda con apertura, caminata de manos'},
+ {n:3,t:'Activación de cadera',min:4,dose:'2–3 × 10 de cada desplazamiento, más una plancha de 5–10 s',ex:'Banda en las rodillas o los tobillos: desplazamiento lateral y hacia adelante. Copenhagen corto'},
+ {n:4,t:'Activación de core',min:3,dose:'2 × 6–10 repeticiones o 6–10 s',ex:'Bicho muerto, perro de caza, plancha con toque de hombro, press Pallof'},
+ {n:5,t:'En el campo: técnica de carrera y progresiones',min:5,dose:'2 × 15 m de cada ejercicio y 3–4 progresiones',ex:'Skipping, talones, zancadas; progresiones de 30–40 m que terminan cerca del máximo si después hay sprint o partido'}];
+export const WARMUP_RULES=[
+ 'Total: activa todo el cuerpo, con más atención a lo que se va a usar después.',
+ 'Dinámica y ordenada: de menos a más, sin quedarse quieto.',
+ 'Acorde a lo que viene: antes de velocidad o de partido tiene que terminar cerca del máximo.',
+ 'De 15 a 20 minutos. Entre la entrada en calor y la tarea, abrigarse y no enfriarse.'];
+export const COOL_STRETCH=[
+ ['Estiramiento simple','Llegar despacio hasta sentir una tensión suave y quedarse 10–30 s respirando lento. Después, un poco más de amplitud y otros 10–30 s.'],
+ ['Tensión y estiramiento','Apretar el músculo contra una resistencia 6–10 s, aflojar 2–3 s y estirar como en el simple. Gana más amplitud.'],
+ ['Cuándo','Después del entrenamiento o en días de recuperación. Antes de velocidad o de partido, mejor dinámico. Nunca pasar el punto de dolor.']];
+
+/* ---------- pretemporada corta de 5 semanas ---------- */
+export const SHORT_PRE={
+ ask:['¿Cuánto tiempo estuvieron parados?','¿Edad promedio del plantel? ¿Cuántos tienen más de 30 años?','¿Qué experiencia de entrenamiento tienen?','¿Cuál es el modelo de juego del entrenador?','¿Qué materiales y espacio hay?','¿Cuánto tiempo hay para la parte física? Hablarlo con el entrenador.'],
+ lines:[
+  ['Fuerza','2 sesiones por semana. Circuitos, contrastes y complejos con cargas medias y bajas. En el día de tensión.'],
+  ['Velocidad','2 estímulos por semana de 100–160 m: aceleración y velocidad máxima, con sprint común y resistido.'],
+  ['Resistencia','Las 3 primeras semanas, subir la potencia aeróbica. Después, mantener la capacidad y estimular la potencia. 1 o 2 estímulos por semana en el día de duración.']],
+ days:[
+  ['Día de tensión (fuerza)','Fuerza en dos islas que rotan (rutina “Fuerza en campo por islas”).'],
+  ['Día de duración (resistencia)','Capacidad: 5–6 × 600 m al 85–90 % de la VAM o 3–4 × 800 m al 80 %. Potencia: 6–10 × 300 m al 110–120 %, 10 × 100 m al 110 % o 50 m al 130 %. Las distancias de cada jugador, en la calculadora de Resistencia.'],
+  ['Día de velocidad (48 h antes del partido)','4 × 20 m y 2 × 30 m, o 4 × 30 m, o 4 × 40 m. Salidas lanzadas y competencias. Pausa de 1 minuto cada 10 m de sprint.']],
+ weeks:[
+  ['Semana 1','Adaptación y evaluaciones. Fuerza en circuito, intermitentes suaves y juegos de posesión.'],
+  ['Semana 2','Carga: sube el volumen. Fuerza 2 veces, velocidad 2 veces, resistencia de capacidad y de potencia.'],
+  ['Semana 3','La de más volumen. Último bloque fuerte de resistencia aeróbica.'],
+  ['Semana 4','Específica: intensidad alta, modelo de juego y amistoso.'],
+  ['Semana 5','Ajuste: baja el volumen, se mantiene la intensidad y se repiten las evaluaciones. Amistoso.']]};

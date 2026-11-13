@@ -2,7 +2,7 @@
 // Nivel: 1 básico, 2 intermedio, 3 avanzado. Dentro de cada grupo van de más simple a más complejo.
 // El video y la imagen de cada ejercicio los carga el cuerpo técnico desde la app.
 
-export const LIB_PATTERNS=['Rodilla dominante','Cadera dominante','Empuje','Tracción','Core','Pliometría'];
+export const LIB_PATTERNS=['Rodilla dominante','Cadera dominante','Empuje','Tracción','Core','Pliometría','Velocidad y cambios de dirección'];
 export const LEVELS={1:'Básico',2:'Intermedio',3:'Avanzado'};
 
 const P=(pattern,group,rows)=>rows.map(([id,name,level,cue])=>({id,pattern,group,name,level,cue}));
@@ -133,5 +133,39 @@ export const LIB=[
   ['pl-multisaltos','Multisaltos alternados',3,'Zancadas saltadas largas, de una pierna a la otra.']]),
  ...P('Pliometría','Con caída',[
   ['pl-drop','Salto con caída desde 30 cm',3,'Dejarse caer y rebotar con el menor tiempo de contacto posible.'],
-  ['pl-profundidad','Salto en profundidad',3,'Caída más alta y salto máximo. Solo con buena base de fuerza.']])
+  ['pl-profundidad','Salto en profundidad',3,'Caída más alta y salto máximo. Solo con buena base de fuerza.']]),
+ ...P('Velocidad y cambios de dirección','Técnica de carrera',[
+  ['vl-pared','Marcha contra la pared',1,'Manos en la pared y cuerpo inclinado: subir la rodilla y bajar el pie debajo de la cadera, de a una pierna.'],
+  ['vl-marcha','Marcha con rodilla arriba',1,'Postura alta, tobillo con la punta hacia arriba y braceo coordinado.'],
+  ['vl-skip','Skipping',1,'Contactos cortos debajo del cuerpo; la rodilla sube hacia adelante.'],
+  ['vl-talones','Talones a los glúteos',1,'El talón sube por debajo de la cadera, sin llevar la rodilla atrás.'],
+  ['vl-zancada','Zancadas largas',2,'Empujar el piso hacia atrás y caer con el pie debajo del cuerpo.'],
+  ['vl-progresion','Progresiones de 30–40 m',1,'Aumentar la velocidad de a poco hasta el 80–95 %, manteniendo la técnica.']]),
+ ...P('Velocidad y cambios de dirección','Aceleración',[
+  ['vl-3apoyos','Salida de 3 apoyos',1,'Una mano en el piso, el peso adelante; los primeros pasos empujan hacia atrás.'],
+  ['vl-caida','Salida en caída',1,'Dejarse caer hacia adelante con el cuerpo recto y salir al sprint en el último momento.'],
+  ['vl-senal','Salida con señal desde distintas posiciones',2,'Sentado, acostado, de espaldas o de costado: reaccionar y acelerar 10–20 m.'],
+  ['vl-trineo','Sprint con trineo',2,'Carga liviana (5–10 % del peso corporal) para no cambiar la técnica. 10–30 m.'],
+  ['vl-cuesta','Sprint en cuesta corta',2,'20–30 m en pendiente de 3–8°. Rodillas arriba y apoyo de metatarso.'],
+  ['vl-goma','Sprint frenado por compañero o goma',2,'El compañero frena sin cortar la carrera. Inclinación cerca de 45°.']]),
+ ...P('Velocidad y cambios de dirección','Velocidad máxima',[
+  ['vl-lanzado','Sprint lanzado (20 + 20 m)',2,'20 m de aceleración progresiva y 20 m al máximo. Pausa larga.'],
+  ['vl-inout','Entradas y salidas',2,'Alternar tramos acelerando y tramos soltando sin frenar.'],
+  ['vl-chaleco','Sprint con chaleco lastrado',3,'Carga baja o media. Mantener la postura alta.'],
+  ['vl-bajada','Sprint en bajada suave',3,'Pendiente de 3–6°. Si apoya el talón o frena, la pendiente es demasiada.']]),
+ ...P('Velocidad y cambios de dirección','Lateral y cambios de dirección',[
+  ['vl-posicion','Posición básica atlética',1,'Pies más abiertos que la cadera, peso en el medio del pie y columna neutra.'],
+  ['vl-lateral','Desplazamiento lateral',1,'Bajo, empuja la pierna de afuera; poco tiempo en el aire.'],
+  ['vl-cruce','Paso cruzado y sprint',2,'La pierna de afuera cruza rápido por delante y se sale al sprint.'],
+  ['vl-abierto','Paso abierto',1,'Abrir la cadera hacia donde se va y salir sin pasos de más.'],
+  ['vl-atras','Paso atrás, giro y sprint',2,'Retroceder, girar la cadera y acelerar hacia atrás.'],
+  ['vl-freno','Frenada en 3 pasos',1,'Bajar el centro de gravedad en los últimos pasos y apoyar adelante del cuerpo.'],
+  ['vl-505','5-0-5',2,'Giro de 180°, frenando bajo, hacia los dos lados.'],
+  ['vl-zigzag','Zigzag de conos a 45°',1,'Cortes cortos sin perder velocidad. Es el giro que menos carga.'],
+  ['vl-curva','Carrera en curva',2,'Inclinar el cuerpo hacia adentro de la curva, como en un desmarque.']]),
+ ...P('Velocidad y cambios de dirección','Con decisión (reactivo)',[
+  ['vl-color','Salida por color o número',2,'El entrenador dice o muestra hacia dónde. Reaccionar y acelerar 5–10 m.'],
+  ['vl-espejo','Espejo 1v1',2,'Uno guía y el otro copia los desplazamientos; al silbato, sprint.'],
+  ['vl-persec','Persecución',2,'Salen con 2 m de diferencia: atrapar antes de la línea.'],
+  ['vl-pelota','Reacción a un pase que no se ve venir',3,'De espaldas: al ver la pelota, acelerar y descargar a un toque en menos de 2 s.']])
 ];
