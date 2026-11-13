@@ -3,7 +3,7 @@
 const D=n=>{const d=new Date();d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const T=n=>new Date(Date.now()+n*864e5).toISOString();
 const POS=['Arquero','Defensor central','Defensor central','Lateral derecho','Lateral izquierdo','Volante central','Volante interno','Volante interno','Enganche','Extremo','Extremo','Delantero centro'];
-const players={};POS.forEach((pos,i)=>players['p'+i]={name:'Jugador Ejemplo '+(i+1),number:i+1,position:pos,foot:i%4==0?'Izquierdo':'Derecho',gym:i%3==0?'Sí':'No',gymDays:i%3==0?3:'',gymPlace:i%3==0?'Gimnasio del club':'',by:'u1',at:T(-20)});
+const players={};POS.forEach((pos,i)=>players['p'+i]={name:'Jugador Ejemplo '+(i+1),number:i+1,position:pos,foot:i%4==0?'Izquierdo':'Derecho',gym:i%3==0?'Sí':'No',gymDays:i%3==0?3:'',gymPlace:i%3==0?'Gimnasio del club':'',birth:[[0,2001],[2,1998],[5,1996],[19,2000],[40,1995]].reduce((r,[d,y],k)=>[3,7,10,1,5][k]===i?(()=>{const x=new Date();x.setDate(x.getDate()+d);x.setFullYear(y);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')})():r,''),by:'u1',at:T(-20)});
 const att=o=>{const m={};POS.forEach((_,i)=>m['p'+i]=o[i]||'P');return m};
 window.__store=window.__store||{
  config:{access:{owner:'ejemplo@cuaderno.app',emails:['ejemplo@cuaderno.app','ayudante@ejemplo.com']},club:{name:'Primera (ejemplo)'}},

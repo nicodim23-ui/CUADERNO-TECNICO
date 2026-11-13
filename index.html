@@ -124,6 +124,33 @@ select.flt{border:1px solid var(--line);background:var(--surface);border-radius:
 .panel>h3 small{font-family:var(--f-body);text-transform:none;letter-spacing:0;font-size:13px;color:var(--muted);font-weight:500}
 .panel .body{padding:14px 16px}
 .match-card{display:grid;gap:4px}
+.col{display:grid;gap:18px;min-width:0}
+.panel.today{border-color:var(--accent);margin-bottom:18px}
+.today .body{display:grid;gap:6px}
+.today-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.today-t{font-family:var(--f-display);font-size:28px;font-weight:700;text-transform:uppercase;line-height:1.05}
+.today-g{color:var(--muted);font-size:15px}
+.today-m{font-size:14px}
+.today-bd{font-size:14px;padding:8px 12px;border-radius:10px;background:var(--accent-soft)}
+.today-s{display:grid;gap:8px;padding-top:10px;margin-top:4px;border-top:1px solid var(--line)}
+.today .tools{margin-top:6px}
+.pend{display:grid;gap:0}
+.pend-it{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:14px;flex-wrap:wrap}
+.pend-it:first-child{border-top:0;padding-top:0}
+.pend-t{flex:1;min-width:200px}
+.pend details,.miss{margin-top:6px}
+.pend summary,.miss summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600}
+.wavg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.wavg>div{border:1px solid var(--line);border-radius:10px;padding:6px 10px;display:grid;gap:2px}
+.wavg .k{font-size:12px;color:var(--muted);font-weight:600}
+.wavg b{font-size:20px}.wavg b.lo{color:var(--warn)}
+@media (max-width:420px){.wavg{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.wk{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;height:150px;align-items:end}
+.wk-c{display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;height:100%;text-align:center;gap:4px;min-width:0}
+.wk-f{display:block;background:var(--accent-soft);border-radius:6px 6px 0 0;min-height:2px}
+.wk-c.cur .wk-f{background:var(--accent)}
+.wk-n{font-size:12px;white-space:nowrap}
+.wk-l{font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:4px}
 .match-card .rival{font-family:var(--f-display);font-size:28px;font-weight:700;text-transform:uppercase;line-height:1.05}
 
 /* Listas */
@@ -476,6 +503,6 @@ details.g-det h5{margin:0}
 <div id="big" hidden role="dialog" aria-label="Sesión en pantalla grande"></div>
 <div class="toast" id="toast" hidden></div>
 
-<script type="module" src="app.js?v=9"></script>
+<script type="module" src="app.js?v=10"></script>
 </body>
 </html>

@@ -328,39 +328,98 @@ const rowActs=(key,id)=>`<div class="acts"><button class="btn ghost sm" type="bu
 const empty=(title,text,col,label)=>`<div class="empty"><strong>${title}</strong><p>${text}</p>${col?addBtn(col,label):''}</div>`;
 const byline=d=>`<span>${d.editBy?'Editado por ':'Cargado por '}${esc(pname(d.editBy||d.by))} · ${ago(d.editAt||d.at)}</span>`;
 
+/* ---------- resumen ---------- */
+const DOWL=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const plural=(n,a,b)=>n===1?a:b;
+const nextMatch=()=>{const t=today();return [...S.matches].filter(m=>m.date>=t&&!isNum(m.gf)).sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')))[0]};
+function todayPlan(){
+ const g=gset(),t=today(),wd=parse(t).getDay();
+ if(g.period==='T')return {wd,code:'',train:false,trans:true};
+ const nm=nextMatch();const md=nm&&daysBetween(t,nm.date)<=6?parse(nm.date).getDay():g.matchDay;
+ const lay=weekLayout({period:g.period,matchDay:md,match2:md===g.matchDay?g.match2:-1,trainDays:g.trainDays,gweek:2,model:g.model});
+ return lay.find(x=>x.wd===wd)||{wd,code:'',train:false};
+}
+function birthdays(){
+ const t=today(),y=parse(t).getFullYear();
+ return S.players.filter(p=>p.birth&&parse(p.birth)).map(p=>{const b=parse(p.birth);let d=iso(new Date(y,b.getMonth(),b.getDate()));if(d<t)d=iso(new Date(y+1,b.getMonth(),b.getDate()));return {p,d,n:daysBetween(t,d),turns:parse(d).getFullYear()-b.getFullYear()}}).sort((a,b)=>a.n-b.n||(a.p.name||'').localeCompare(b.p.name||''));
+}
+function weekLoads(n=6){
+ const t=today(),mon=addDays(t,-((parse(t).getDay()+6)%7));
+ return Array.from({length:n},(_,i)=>{const st=addDays(mon,-7*(n-1-i)),en=addDays(st,6);return {st,v:S.sessions.filter(s=>s.date>=st&&s.date<=en).reduce((a,s)=>a+(load(s)||0),0),cur:i===n-1}});
+}
+const isGK=p=>/arquer/i.test(p.position||'');
+function pendings(NUM){
+ const t=today(),out=[];const sd=s=>`${DOW[parse(s.date).getDay()]} ${fd(s.date)}`;
+ sessOrder().filter(s=>s.date&&s.date<t&&daysBetween(s.date,t)<=14&&!hasAtt(s)).forEach(s=>out.push({txt:`Falta la asistencia de la sesión N° ${NUM[s.id]} (${esc(s.type||'Sesión')} del ${sd(s)})`,act:'att',id:s.id,btn:'Tomar asistencia'}));
+ const lastS=sessOrder().filter(s=>s.date&&s.date<t&&daysBetween(s.date,t)<=7).pop();
+ if(lastS){
+  const got=rpesOf(lastS.date).filter(c=>c.activity!=='Gimnasio');
+  if(S.checkins.length){
+   const m=attMap(lastS);const exp=m?Object.keys(m).filter(id=>(m[id]==='P'||m[id]==='T')&&pl(id)):S.players.filter(p=>availability(p.id)[0]==='Disponible').map(p=>p.id);
+   const have=new Set(got.map(c=>c.player));const miss=exp.filter(id=>!have.has(id));
+   if(miss.length)out.push({txt:`${miss.length} ${plural(miss.length,'jugador no cargó','jugadores no cargaron')} el RPE de la sesión del ${sd(lastS)}`,names:miss.map(plName),act:'tab',k:'well',btn:'Ir a Bienestar'});
+  }else if(!isNum(lastS.rpe))out.push({txt:`Falta el RPE de la sesión del ${sd(lastS)}`,act:'att',id:lastS.id,btn:'Cargar RPE'});
+ }
+ const noIft=sortedPlayers().filter(p=>!isGK(p)&&!lastTest(p.id,['30-15 IFT','30-15']));
+ if(noIft.length&&S.players.length)out.push({txt:`${noIft.length} ${plural(noIft.length,'jugador','jugadores')} sin 30-15 IFT (lo usa la calculadora de Resistencia)`,names:noIft.map(p=>p.name),act:'tab',k:'tests',btn:'Ir a Tests'});
+ return out;
+}
+let feedAll=false;
 function vResumen(){
  const n=S.players.length, inj=activeInj(), injPlayers=[...new Set(inj.map(i=>i.player))].filter(id=>pl(id));
  const t=today(); const wk=S.sessions.filter(s=>s.date&&daysBetween(s.date,t)>=0&&daysBetween(s.date,t)<7);
  const wkLoad=wk.reduce((a,s)=>a+(load(s)||0),0);
  const prev=S.sessions.filter(s=>s.date&&daysBetween(s.date,t)>=7&&daysBetween(s.date,t)<14).reduce((a,s)=>a+(load(s)||0),0);
- const next=[...S.matches].filter(m=>m.date>=t&&!isNum(m.gf)).sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')))[0];
+ const next=nextMatch();
  const last=[...S.matches].filter(m=>isNum(m.gf)&&isNum(m.ga)).sort(byDateDesc)[0];
- const lastS=sessOrder().filter(s=>s.date<=t).pop();
- const nextS=sessOrder().find(s=>s.date>=t&&!hasAtt(s));
+ const todayS=sessOrder().filter(s=>s.date===t);
+ const lastS=sessOrder().filter(s=>s.date<t).pop();
+ const nextS=sessOrder().find(s=>s.date>t);
  const att=wk.map(sessGroupPct).filter(x=>x!=null);
  const attPct=att.length?Math.round(att.reduce((a,b)=>a+b,0)/att.length*100):null;
  const NUM=sessNums();
  const trend=prev?Math.round((wkLoad-prev)/prev*100):null;
- let h=`<div class="bar"><div><h2>Resumen</h2><p>Estado del plantel al ${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}.</p></div></div>
- <div class="stats">
+ const bds=birthdays();const bdToday=bds.filter(b=>b.n===0);
+ const sessBtns=s=>`<div class="tools"><button class="btn sm" type="button" data-act="sheet" data-id="${s.id}">Hoja de sesión</button><button class="btn sm" type="button" data-act="big" data-id="${s.id}">Pantalla grande</button><button class="btn sm" type="button" data-act="att" data-id="${s.id}">Asistencia</button></div>`;
+ let h=`<div class="bar"><div><h2>Resumen</h2><p>Estado del plantel al ${new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'})}.</p></div></div>`;
+ if(!n)h+=empty('Empecemos por el plantel','Cargá los jugadores primero. Después vas a poder registrar asistencia, tests, lesiones y convocatorias para cada uno.','players','Agregar jugador');
+ /* hoy toca */
+ {const e=todayPlan(),i=e.key?INFO[e.key]:null;const dTo=next?daysBetween(t,next.date):null;
+  let title,goal='';
+  if(e.trans){title='Transición';goal='Descanso activo y plan individual de cada jugador.'}
+  else if(e.code==='MD'||dTo===0){title=next&&dTo===0?`Partido vs ${esc(next.rival)}`:'Día de partido';goal='Bienestar antes del partido, convocados, minutos jugados y RPE después.'}
+  else if(!e.train){title=e.rest?'Día libre después del partido':'Sin entrenamiento'}
+  else{title=esc(i?i.t:'Entrenamiento')+(e.last?' + previa del partido':'');goal=i?esc(i.goal):''}
+  const matchLine=next?(dTo===0?`Hoy${next.time?' a las '+esc(next.time)+' h':''} · ${esc(next.venue||'')}`:`${dTo===1?'Mañana':'Faltan '+dTo+' días para'} el partido vs <b>${esc(next.rival)}</b> (${DOW[parse(next.date).getDay()]} ${fd(next.date)}${next.time?' · '+esc(next.time)+' h':''})`):'No hay partidos próximos cargados.';
+  const btns=todayS.length?todayS.map(s=>`<div class="today-s"><span><span class="eyebrow">Sesión de hoy · N° ${NUM[s.id]}</span><br><b>${esc(s.type||'Sesión')}</b>${s.time?' · '+esc(s.time)+' h':''}${s.focus?' · '+esc(s.focus):''}</span>${sessBtns(s)}</div>`).join(''):e.train&&!e.trans?`<div class="tools"><button class="btn primary sm" type="button" data-act="todaytpl">Crear la sesión de hoy desde la guía</button></div>`:'';
+  h+=`<div class="panel today"><div class="body"><div class="today-top"><span class="eyebrow">Hoy toca · ${DOWL[e.wd]}</span>${e.code&&!e.trans?mdPill(e):''}</div><div class="today-t">${title}</div>${goal?`<div class="today-g">${goal}</div>`:''}<div class="today-m">${matchLine}</div>${bdToday.length?`<div class="today-bd">Hoy ${plural(bdToday.length,'cumple','cumplen')} años: <b>${bdToday.map(b=>esc(b.p.name)).join(', ')}</b></div>`:''}${btns}</div></div>`;}
+ /* pendientes */
+ {const P=n?pendings(NUM):[];
+  h+=`<div class="panel"><h3>Pendientes <small>${P.length?P.length+' '+plural(P.length,'cosa','cosas'):'al día'}</small></h3><div class="body">${P.length?`<div class="pend">${P.map(x=>`<div class="pend-it"><div class="pend-t">${x.txt}${x.names?`<details><summary>Ver quiénes</summary><div class="g-sub">${x.names.map(esc).join(', ')}</div></details>`:''}</div><button class="btn sm" type="button" data-act="${x.act}" ${x.id?`data-id="${x.id}"`:''} ${x.k?`data-k="${x.k}"`:''}>${x.btn}</button></div>`).join('')}</div>`:`<p style="margin:0;color:var(--muted)">No hay nada pendiente.</p>`}</div></div>`;}
+ h+=`<div class="stats">
   <div class="stat"><div class="k">Plantel</div><div class="v">${n}</div><div class="s">jugadores cargados</div></div>
-  <div class="stat"><div class="k">Disponibles</div><div class="v">${n-injPlayers.length}</div><div class="s">${attPct!=null?`asistencia semanal ${attPct}%`:'sin sesiones esta semana'}</div></div>
+  <div class="stat"><div class="k">Disponibles</div><div class="v">${n-injPlayers.length}</div><div class="s">${attPct!=null?`asistencia semanal ${attPct} %`:'sin sesiones esta semana'}</div></div>
   <div class="stat"><div class="k">Lesionados</div><div class="v ${injPlayers.length?'warn':''}">${injPlayers.length}</div><div class="s">${inj.filter(i=>i.status==='En readaptación').length} en readaptación</div></div>
-  <div class="stat"><div class="k">Carga 7 días</div><div class="v">${wkLoad.toLocaleString('es-AR')}</div><div class="s">UA${trend!=null?` · ${trend>0?'+':''}${trend}% vs semana anterior`:''}</div></div>
- </div><div class="cols"><div style="display:grid;gap:18px;min-width:0">`;
- h+=`<div class="panel"><h3>Próximo partido</h3><div class="body">${next?`<div class="match-card"><span class="eyebrow">${esc(next.competition||'Partido')} · ${esc(next.venue||'')}</span><div class="rival">vs ${esc(next.rival)}</div><div class="mono" style="color:var(--muted);font-size:13px">${DOW[parse(next.date).getDay()]} ${fdy(next.date)}${next.time?' · '+esc(next.time)+' h':''} · ${daysBetween(t,next.date)===0?'hoy':'faltan '+daysBetween(t,next.date)+' días'}</div></div>`:`<p style="margin:0;color:var(--muted)">No hay partidos próximos cargados.</p>`}
+  <div class="stat"><div class="k">Carga 7 días</div><div class="v">${wkLoad.toLocaleString('es-AR')}</div><div class="s">RPE × minutos${trend!=null?` · ${trend>0?'+':''}${trend} % vs los 7 anteriores`:''}</div></div>
+ </div><div class="cols"><div class="col">`;
+ h+=`<div class="panel"><h3>Próximo partido</h3><div class="body">${next?`<div class="match-card"><span class="eyebrow">${esc(next.competition||'Partido')}${next.venue?' · '+esc(next.venue):''}</span><div class="rival">vs ${esc(next.rival)}</div><div class="mono" style="color:var(--muted);font-size:13px">${DOW[parse(next.date).getDay()]} ${fdy(next.date)}${next.time?' · '+esc(next.time)+' h':''} · ${daysBetween(t,next.date)===0?'hoy':daysBetween(t,next.date)===1?'mañana':'faltan '+daysBetween(t,next.date)+' días'}</div></div>`:`<p style="margin:0;color:var(--muted)">No hay partidos próximos cargados.</p>`}
  ${last?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><span><span class="eyebrow">Último resultado</span><br>vs ${esc(last.rival)} · ${fd(last.date)}</span><span class="score">${+last.gf} – ${+last.ga}</span></div>`:''}</div></div>`;
- h+=`<div class="panel"><h3>Fuera por lesión <small>${inj.length} activas</small></h3><div class="body">${inj.length?`<div class="mini">${[...inj].sort((a,b)=>(a.eta||'9').localeCompare(b.eta||'9')).map(i=>`<div><span><b>${esc(plName(i.player))}</b> · ${esc(i.zone||'')}</span><span class="pill ${i.status==='Activa'?'warn':'amber'}">${i.eta?'Vuelve '+fd(i.eta):esc(i.status)}</span></div>`).join('')}</div>`:`<p style="margin:0;color:var(--muted)">Todo el plantel está disponible.</p>`}</div></div>`;
- const sessBox=(s,label)=>`<div style="display:grid;gap:8px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><span><span class="eyebrow">${label} · Sesión N° ${NUM[s.id]}</span><br><b>${esc(s.type||'Sesión')}</b> · ${DOW[parse(s.date).getDay()]} ${fdy(s.date)}${s.time?' · '+esc(s.time)+' h':''}<br><span style="color:var(--muted)">${esc(s.focus||'Sin objetivo cargado')}</span></span><span class="mono">${sessDuration(s)?sessDuration(s)+' min':''}${load(s)!=null?' · '+load(s)+' UA':''}</span></div>
-  <div class="tools"><button class="btn sm" type="button" data-act="sheet" data-id="${s.id}">Hoja de sesión</button><button class="btn sm" type="button" data-act="big" data-id="${s.id}">Pantalla grande</button><button class="btn sm" type="button" data-act="att" data-id="${s.id}">Asistencia</button></div></div>`;
- h+=`<div class="panel"><h3>Sesiones</h3><div class="body" style="display:grid;gap:14px">${nextS?sessBox(nextS,nextS.date===t?'Hoy':'Próxima'):''}${lastS&&lastS!==nextS?(nextS?'<div style="border-top:1px solid var(--line)"></div>':'')+sessBox(lastS,'Última'):''}${!nextS&&!lastS?`<p style="margin:0;color:var(--muted)">Todavía no hay sesiones cargadas.</p>`:''}</div></div>`;
+ h+=`<div class="panel"><h3>Fuera por lesión <small>${inj.length} ${plural(inj.length,'activa','activas')}</small></h3><div class="body">${inj.length?`<div class="mini">${[...inj].sort((a,b)=>(a.eta||'9').localeCompare(b.eta||'9')).map(i=>`<div><span><b>${esc(plName(i.player))}</b> · ${esc(i.zone||'')}</span><span class="pill ${i.status==='Activa'?'warn':'amber'}">${i.eta?'Vuelve '+fd(i.eta):esc(i.status)}</span></div>`).join('')}</div>`:`<p style="margin:0;color:var(--muted)">Todo el plantel está disponible.</p>`}</div></div>`;
  {const ans=sortedPlayers().map(p=>({p,w:wellOf(p.id,t)})).filter(r=>r.w);const al=ans.filter(r=>WELL.some(w=>+r.w[w[0]]<=2));
- h+=`<div class="panel"><h3>Bienestar de hoy <small>${ans.length} de ${n} respondieron</small></h3><div class="body">${al.length?`<div class="mini">${al.map(r=>`<div><span><b>${esc(r.p.name)}</b>${r.w.painZone?' · dolor: '+esc(r.w.painZone):''}</span><span class="pill warn">${WELL.filter(w=>+r.w[w[0]]<=2).map(w=>w[1]).join(', ')}</span></div>`).join('')}</div>`:`<p style="margin:0;color:var(--muted)">${ans.length?'Sin alertas: nadie marcó valores bajos.':'Todavía nadie cargó cómo llegó. Mandales su link desde la pestaña Bienestar.'}</p>`}</div></div>`}
- h+=`</div><div class="panel"><h3>Actividad del cuerpo técnico</h3><div class="body">${feed()}</div></div></div>`;
- if(!n)h=empty('Empecemos por el plantel','Cargá los jugadores primero. Después vas a poder registrar asistencia, tests, lesiones y convocatorias para cada uno.','players','Agregar jugador')+h;
+  const missing=sortedPlayers().filter(p=>!wellOf(p.id,t));
+  const avg=k=>{const v=ans.map(r=>+r.w[k]).filter(x=>x>0);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null};
+  h+=`<div class="panel"><h3>Bienestar de hoy <small>${ans.length} de ${n} respondieron</small></h3><div class="body">${ans.length?`<div class="wavg">${WELL.map(w=>{const a=avg(w[0]);return `<div><span class="k">${w[1]}</span><b class="num ${a!=null&&a<3?'lo':''}">${a!=null?a.toFixed(1).replace('.',','):'—'}</b></div>`}).join('')}</div><p class="g-sub" style="margin:6px 0 10px">Promedio del plantel, de 1 (mal) a 5 (muy bien).</p>${al.length?`<div class="mini">${al.map(r=>`<div><span><b>${esc(r.p.name)}</b>${r.w.painZone?' · dolor: '+esc(r.w.painZone):''}</span><span class="pill warn">${WELL.filter(w=>+r.w[w[0]]<=2).map(w=>w[1]).join(', ')}</span></div>`).join('')}</div>`:`<p style="margin:0;color:var(--muted)">Sin alertas: nadie marcó valores bajos.</p>`}${missing.length?`<details class="miss"><summary>Faltan responder ${missing.length}</summary><div class="g-sub">${missing.map(p=>esc(p.name)).join(', ')}</div></details>`:''}`:`<p style="margin:0;color:var(--muted)">Todavía nadie cargó cómo llegó hoy. Cada jugador lo carga desde su link (pestaña Bienestar).</p>`}</div></div>`;}
+ h+=`</div><div class="col">`;
+ const sessBox=(s,label)=>`<div style="display:grid;gap:8px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><span><span class="eyebrow">${label} · Sesión N° ${NUM[s.id]}</span><br><b>${esc(s.type||'Sesión')}</b> · ${DOW[parse(s.date).getDay()]} ${fdy(s.date)}${s.time?' · '+esc(s.time)+' h':''}<br><span style="color:var(--muted)">${esc(s.focus||'Sin objetivo cargado')}</span></span><span class="mono">${sessDuration(s)?sessDuration(s)+' min':''}${load(s)!=null?' · carga '+load(s):''}</span></div>${sessBtns(s)}</div>`;
+ h+=`<div class="panel"><h3>Sesiones</h3><div class="body" style="display:grid;gap:14px">${nextS?sessBox(nextS,'Próxima'):''}${lastS?(nextS?'<div style="border-top:1px solid var(--line)"></div>':'')+sessBox(lastS,'Última'):''}${!nextS&&!lastS?`<p style="margin:0;color:var(--muted)">${todayS.length?'La sesión de hoy está arriba.':'Todavía no hay sesiones cargadas.'}</p>`:''}</div></div>`;
+ {const W=weekLoads(6),mx=Math.max(...W.map(w=>w.v),1);
+  h+=`<div class="panel"><h3>Carga por semana <small>RPE × minutos</small></h3><div class="body">${W.some(w=>w.v)?`<div class="wk">${W.map(w=>`<div class="wk-c ${w.cur?'cur':''}"><span class="num wk-n">${w.v?w.v.toLocaleString('es-AR'):'—'}</span><span class="wk-f" style="height:${Math.round(w.v/mx*100)}%"></span><span class="wk-l">${w.cur?'Esta':fd(w.st)}</span></div>`).join('')}</div><p class="g-sub" style="margin:8px 0 0">Semanas de lunes a domingo. Solo suma las sesiones con RPE cargado; la de esta semana está en curso.</p>`:`<p style="margin:0;color:var(--muted)">Aparece cuando las sesiones tienen el RPE cargado (desde Asistencia).</p>`}</div></div>`;}
+ {const soon=bds.filter(b=>b.n<=7);
+  h+=`<div class="panel"><h3>Cumpleaños</h3><div class="body">${!bds.length?`<p style="margin:0;color:var(--muted)">Cargá la fecha de nacimiento de cada jugador en Plantel y acá aparecen los cumpleaños de la semana.</p>`:soon.length?`<div class="mini">${soon.map(b=>`<div><span><b>${esc(b.p.name)}</b> · cumple ${b.turns}</span><span class="pill ${b.n===0?'acc':''}">${b.n===0?'¡Hoy!':b.n===1?'Mañana':DOW[parse(b.d).getDay()]+' '+fd(b.d)}</span></div>`).join('')}</div>`:`<p style="margin:0;color:var(--muted)">Nadie cumple esta semana. El próximo es <b>${esc(bds[0].p.name)}</b>, el ${fd(bds[0].d)}.</p>`}</div></div>`;}
+ h+=`<div class="panel"><h3>Actividad del cuerpo técnico</h3><div class="body">${feed(feedAll?40:5)}</div></div></div></div>`;
  return h;
 }
-function feed(){
+function feed(max=14){
  const L={players:'agregó a',sessions:'cargó la sesión',tests:'registró un test de',injuries:'registró una lesión de',routines:'creó la rutina',matches:'cargó el partido vs',mesos:'creó el mesociclo',micros:'creó el microciclo del',gymlogs:'registró gimnasio de'};
  const E={players:'editó a',sessions:'editó la sesión',tests:'editó un test de',injuries:'actualizó la lesión de',routines:'editó la rutina',matches:'editó el partido vs',mesos:'editó el mesociclo',micros:'editó el microciclo del',gymlogs:'editó el gimnasio de'};
  const items=[];COLS.filter(c=>L[c]).forEach(c=>S[c].forEach(d=>{const ed=!!d.editAt;const when=d.editAt||d.at;if(!when)return;
@@ -368,7 +427,7 @@ function feed(){
   items.push({when,by:d.editBy||d.by,txt:(ed?E:L)[c],obj})}));
  items.sort((a,b)=>b.when.localeCompare(a.when));
  if(!items.length)return`<p style="margin:0;color:var(--muted)">Acá vas a ver quién cargó o cambió cada dato.</p>`;
- return `<div class="feed">${items.slice(0,14).map(i=>`<div class="it">${avatar(i.by)}<div><b>${esc(pname(i.by))}</b> ${i.txt} <b>${esc(i.obj||'')}</b><div class="when">${ago(i.when)}</div></div></div>`).join('')}</div>`;
+ return `<div class="feed">${items.slice(0,max).map(i=>`<div class="it">${avatar(i.by)}<div><b>${esc(pname(i.by))}</b> ${i.txt} <b>${esc(i.obj||'')}</b><div class="when">${ago(i.when)}</div></div></div>`).join('')}</div>${items.length>5&&max<=5?`<button class="btn sm" type="button" data-act="feedall" style="margin-top:10px">Ver todo</button>`:max>5&&tab==='resumen'?`<button class="btn sm" type="button" data-act="feedall" style="margin-top:10px">Ver menos</button>`:''}`;
 }
 function attPctFor(id){return attStats(id,S.sessions.filter(s=>inLastDays(s.date,30))).pct}
 function vPlayers(){
@@ -1257,6 +1316,8 @@ document.addEventListener('click',e=>{
  else if(a==='libadd'){const ex=libAll().find(v=>v.id===$('#lp_ex').value);if(!ex)return;const box=document.querySelector('[data-rows="exercises"]');const first=box.querySelector('[data-row]');if(first&&box.children.length===1&&!first.querySelector('[data-c="name"]').value.trim())first.remove();box.insertAdjacentHTML('beforeend',rowCard('exercises',{name:ex.name,notes:ex.cue,video:ex.video,img:ex.img},0));renumRows(box);hydrateMedia(box);toast('Agregado: '+ex.name)}
  else if(a==='gyear')openGuideYear(b.dataset.k);
  else if(a==='gwarm')addWarmRoutine();
+ else if(a==='feedall'){feedAll=!feedAll;render()}
+ else if(a==='todaytpl'){const e=todayPlan();openForm('sessions',null,{tpl:sessionFor(e,gPer()),date:today()})}
  else if(a==='rcsess')rcSession();
  else if(a==='gmicro'){e.stopPropagation();openGuideMicro(b.dataset.id)}
  else if(a==='gtpl'){openForm('sessions',null,{tpl:sessionFor({key:b.dataset.k},gPer())})}
