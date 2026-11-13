@@ -200,6 +200,7 @@ function startData(){
 window.addEventListener('online',()=>render());window.addEventListener('offline',()=>render());
 
 /* ---------- formularios: esquema ---------- */
+const LOADS=['Baja','Media','Alta','Muy alta'];
 const POS=['Arquero','Defensor central','Lateral derecho','Lateral izquierdo','Volante central','Volante interno','Enganche','Extremo','Delantero centro'];
 const SCHEMA={
  players:{one:'jugador',fields:[
@@ -282,11 +283,16 @@ const SCHEMA={
   {k:'objective',l:'Objetivos del mesociclo',t:'textarea',full:1},
   {k:'notes',l:'Notas',t:'textarea',full:1}]},
  micros:{one:'microciclo',fields:[
-  {k:'start',l:'Inicio',t:'date',req:1},
-  {k:'end',l:'Fin',t:'date',req:1},
+  {k:'start',l:'Inicio',t:'date',req:1,hint:'En competencia: el día después del partido.'},
+  {k:'end',l:'Fin',t:'date',req:1,hint:'En competencia: el día del próximo partido.'},
   {k:'type',l:'Tipo',t:'select',opts:['Ordinario','Carga','Impacto','Recuperación','Competitivo','Ajuste']},
-  {k:'match',l:'Partido o competencia',t:'text',ph:'Ej: vs Atlético Norte (local)'},
-  {k:'focus',l:'Objetivo del microciclo',t:'text',full:1},
+  {k:'plannedLoad',l:'Carga planificada',t:'select',opts:LOADS},
+  {k:'focus',l:'Objetivo general',t:'text',full:1},
+  {t:'sec',l:'Objetivos por área'},
+  {k:'objFis',l:'Físico',t:'textarea'},
+  {k:'objTec',l:'Técnico',t:'textarea'},
+  {k:'objTac',l:'Táctico',t:'textarea'},
+  {k:'objABP',l:'Pelota parada',t:'textarea'},
   {k:'notes',l:'Notas',t:'textarea',full:1}]},
  gymlogs:{one:'registro de gimnasio',fields:[
   {k:'date',l:'Fecha',t:'date',req:1,def:'today'},
@@ -348,8 +354,10 @@ function doRender(){
  // No re-dibujar Configuración mientras se escribe en uno de sus campos.
  if(tab==='config'&&document.activeElement&&document.activeElement.closest('#view form'))return;
  const banner=rulesOld&&['plan','gym','well','resumen'].includes(tab)?`<div class="banner">Falta actualizar las reglas de Firebase para usar Planificación, Gimnasio, Bienestar y los links de los jugadores. Pedile al administrador que las actualice.</div>`:'';
+ if(tab!=='plan')planScrolled=false;
  $('#view').innerHTML=banner+({resumen:vResumen,players:vPlayers,plan:vPlan,guide:vGuide,sessions:vSessions,att:vAtt,well:vWell,gym:vGym,lib:vLib,tests:vTests,injuries:vInjuries,routines:vRoutines,matches:vMatches,config:vConfig}[tab])();
  hydrateMedia($('#view'));
+ if(tab==='plan'&&!planScrolled){planScrolled=true;requestAnimationFrame(()=>{const c=document.querySelector('#view .mc.cur');if(c)c.scrollIntoView({block:'center'})})}
 }
 const addBtn=(key,label,extra='')=>`<button class="btn primary" type="button" data-act="add" data-col="${key}" ${extra}>+ ${label}</button>`;
 const colOf=key=>(SCHEMA[key]&&SCHEMA[key].col)||key;
@@ -725,7 +733,7 @@ function openForm(key,id,o={}){
   if(col==='tests')defs.unit='s';
   if(key==='sessions')defs.tasks=PARTS.map(p=>({part:p}));
   if(key==='mesos'){defs.start=today();defs.end=addDays(today(),27)}
-  if(key==='micros'){const last=sortStart(S.micros).pop();const st=o.date||(last&&last.end?addDays(last.end,1):today());defs.start=st;defs.end=addDays(st,6)}
+  if(key==='micros'){const last=sortStart(S.micros).pop();const st=o.date||(last&&last.end?addDays(last.end,1):today());defs.start=st;const nm=S.matches.map(m=>m.date).filter(d=>d&&d>st&&daysBetween(st,d)<=10).sort()[0];defs.end=nm||addDays(st,6)}
   if(o.tpl){Object.assign(defs,o.tpl);defs.time=gset().time}
   if(src){Object.assign(defs,src);['date','att','attendance','rpe','shareId','id','by','at','editBy','editAt'].forEach(k=>delete defs[k]);defs.date=o.date||today()}
  }
@@ -767,29 +775,125 @@ function del(btn){
  const {col,id}=btn.dataset;const old=R[col]&&R[col].find(x=>x.id===id);
  if(col==='routines'&&old&&old.shareId)deleteDoc(doc(db,'public',old.shareId)).catch(()=>{});
  if(col==='players'&&old&&old.linkId)deleteDoc(doc(db,'plinks',old.linkId)).catch(()=>{});
- deleteDoc(doc(db,col,id)).catch(err=>toast(errMsg(err)));toast('Borrado');closeDoc();if(col==='exercises'||col==='players')closeModal();
+ deleteDoc(doc(db,col,id)).catch(err=>toast(errMsg(err)));toast('Borrado');closeDoc();if(['exercises','players','mesos','micros'].includes(col))closeModal();
 }
 
 /* ---------- planificación ---------- */
+const TYPE_LOAD={Ordinario:'Media',Carga:'Alta',Impacto:'Muy alta',Ajuste:'Media',Competitivo:'Media','Recuperación':'Baja'};
+const PHASE_CL={Pretemporada:'ph-pre',Precompetitivo:'ph-prec',Competitivo:'ph-comp','Transición':'ph-tr'};
+const MICRO_AREAS=[['objFis','Físico'],['objTec','Técnico'],['objTac','Táctico'],['objABP','Pelota parada']];
+let planScrolled=false;
+const microMatches=c=>S.matches.filter(m=>inRange(m.date,c)).sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||'')));
+function mdCode(d){
+ const ms=[...new Set(S.matches.filter(m=>m.date).map(m=>m.date))].sort();
+ if(ms.includes(d))return 'MD';
+ const nx=ms.find(x=>x>d),pv=[...ms].reverse().find(x=>x<d);const to=nx?daysBetween(d,nx):99,since=pv?daysBetween(pv,d):99;
+ if(since<=2&&to>=3)return 'MD+'+since;
+ if(to<=6)return 'MD-'+to;
+ if(since<=3)return 'MD+'+since;
+ return '';
+}
+const microLoad=c=>S.sessions.filter(s=>inRange(s.date,c)).reduce((a,s)=>a+(load(s)||0),0);
+function loadAvg(){const v=S.micros.map(microLoad).filter(x=>x>0);return v.length>=3?v.reduce((a,b)=>a+b,0)/v.length:0}
+function loadLevel(v,avg){if(!v||!avg)return null;const r=v/avg;return r<0.8?'Baja':r<1.05?'Media':r<1.3?'Alta':'Muy alta'}
+function microDays(c){const out=[];if(!c.start||!c.end)return out;for(let d=c.start;d<=c.end&&out.length<21;d=addDays(d,1))out.push(d);return out}
+function dayGrid(c,NUM){
+ const t=today();
+ return `<div class="mdays">${microDays(c).map(d=>{const code=mdCode(d);const ss=sessOrder().filter(s=>s.date===d);const m=S.matches.find(x=>x.date===d);
+  return `<div class="md-day${d===t?' today':''}${m?' match':''}"><div class="md-h"><b>${DOW[parse(d).getDay()]}</b><span class="num">${fd(d)}</span>${code?`<span class="pill ${code==='MD'?'warn':code.startsWith('MD+')?'':'acc'}">${code}</span>`:''}</div>
+  ${m?`<div class="md-m">vs ${esc(m.rival)}${m.time?' · '+esc(m.time)+' h':''}</div>`:''}
+  ${ss.map(s=>`<button class="chip" type="button" data-act="sheet" data-id="${s.id}"><b>N° ${NUM[s.id]}</b>${esc(s.type||'Sesión')}${hasAtt(s)?' ✓':''}</button>`).join('')}
+  ${!m&&!ss.length?`<button class="chip add" type="button" data-act="add" data-col="sessions" data-date="${d}" aria-label="Agregar sesión el ${fd(d)}">+ Sesión</button>`:''}</div>`}).join('')}</div>`;
+}
+function loadCmp(c,avg){
+ const ld=microLoad(c),real=loadLevel(ld,avg);if(!c.plannedLoad&&!ld)return '';
+ const i=LOADS.indexOf(c.plannedLoad),j=LOADS.indexOf(real);
+ const tag=i<0||j<0?'':j===i?'<span class="pill ok">Como se planificó</span>':j>i?'<span class="pill amber">Más de lo planificado</span>':'<span class="pill">Menos de lo planificado</span>';
+ return `<span>${c.plannedLoad?`Planificada: <b>${esc(c.plannedLoad)}</b>`:''}${c.plannedLoad&&ld?' · ':''}${ld?(real?`Real: <b>${real}</b> (${ld.toLocaleString('es-AR')})`:`Real: ${ld.toLocaleString('es-AR')} <span style="color:var(--muted)">(se compara desde el 3.er microciclo con RPE)</span>`):''}</span>${tag}`;
+}
+function seasonBar(){
+ const ms=sortStart(S.mesos).filter(m=>m.start&&m.end);if(!ms.length)return '';
+ const a=ms[0].start,b=ms[ms.length-1].end,tot=daysBetween(a,b)+1,t=today();
+ const pos=d=>Math.max(0,Math.min(100,daysBetween(a,d)/tot*100));
+ const months=[];let d=parse(a);d=new Date(d.getFullYear(),d.getMonth()+1,1);while(iso(d)<=b){months.push(iso(d));d=new Date(d.getFullYear(),d.getMonth()+1,1)}
+ const MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+ const mt=S.matches.filter(m=>m.date>=a&&m.date<=b);
+ return `<div class="panel"><h3>Temporada <small>${fdy(a)} – ${fdy(b)}</small></h3><div class="body"><div class="sbar">
+  <div class="sb-track">${ms.map(m=>{const w=(daysBetween(m.start,m.end)+1)/tot*100;return `<button class="sb-seg ${PHASE_CL[m.phase]||''}" type="button" data-act="mesogo" data-id="${m.id}" style="left:${pos(m.start)}%;width:${w}%" title="${esc(m.name)}">${w>9?`<span>${esc(m.name)}</span>`:''}</button>`}).join('')}
+  ${t>=a&&t<=b?`<span class="sb-today" style="left:${pos(t)}%"><span>Hoy</span></span>`:''}</div>
+  <div class="sb-dots">${mt.map(m=>`<span class="sb-dot${isNum(m.gf)?' played':''}" style="left:${pos(m.date)}%" title="${fd(m.date)} vs ${esc(m.rival)}"></span>`).join('')}</div>
+  <div class="sb-months">${months.map(x=>`<span style="left:${pos(x)}%">${MES[parse(x).getMonth()]}</span>`).join('')}</div></div>
+  <div class="sb-legend">${Object.entries(PHASE_CL).map(([k,v])=>`<span><i class="${v}"></i>${k}</span>`).join('')}<span><i class="sb-dot-l"></i>Partido</span></div></div></div>`;
+}
 function vPlan(){
- const h=`<div class="bar"><div><h2>Planificación</h2><p>Mesociclos, microciclos y sesiones. Cada sesión se ubica sola en su microciclo según la fecha.</p></div><div class="tools"><button class="btn" type="button" data-act="gyear">Armar con la guía</button><button class="btn" type="button" data-act="add" data-col="mesos">+ Mesociclo</button><button class="btn" type="button" data-act="add" data-col="micros">+ Microciclo</button>${addBtn('sessions','Sesión')}</div></div>`;
+ const h=`<div class="bar"><div><h2>Planificación</h2><p>Mesociclos, microciclos de partido a partido y sesiones. Cada sesión se ubica sola en su microciclo según la fecha.</p></div><div class="tools"><button class="btn" type="button" data-act="gyear">Armar con la guía</button><button class="btn primary" type="button" data-act="planadd">+ Agregar</button></div></div>`;
  const ms=sortStart(S.mesos), mcs=sortStart(S.micros);
- if(!ms.length&&!mcs.length)return h+`<div class="empty"><strong>Armá la temporada</strong><p>Empezá por un mesociclo (por ejemplo, la pretemporada) y dividilo en microciclos de una semana. Después creá las sesiones de cada microciclo.</p><div class="tools" style="justify-content:center"><button class="btn primary" type="button" data-act="gyear">Armar la temporada con la guía</button><button class="btn" type="button" data-act="add" data-col="mesos">+ Mesociclo</button><button class="btn" type="button" data-act="add" data-col="micros">+ Microciclo</button></div></div>`;
- const NUM=sessNums();
- const microBlock=c=>{const ss=sessOrder().filter(s=>inRange(s.date,c));const ld=ss.reduce((a,s)=>a+(load(s)||0),0);
-  return `<div class="mc"><div class="k">MC ${microNum(c)}<small>${fd(c.start)}–${fd(c.end)}</small></div>
-  <div class="main" style="min-width:0"><div class="t" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${c.type?`<span class="pill acc">${esc(c.type)}</span>`:''}${c.match?`<span style="font-weight:600">${esc(c.match)}</span>`:''}</div>${c.focus?`<div style="font-size:14px;margin-top:2px">${esc(c.focus)}</div>`:''}
-  <div class="chips">${ss.map(s=>`<button class="chip" type="button" data-act="sheet" data-id="${s.id}"><b>N° ${NUM[s.id]}</b>${DOW[parse(s.date).getDay()]} ${fd(s.date)} · ${esc(s.type||'Sesión')}${hasAtt(s)?' ✓':''}</button>`).join('')}<button class="chip add" type="button" data-act="add" data-col="sessions" data-date="${c.start}">+ Sesión</button><button class="chip add" type="button" data-act="gmicro" data-id="${c.id}">Sesiones guía</button></div>
-  ${ld?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${ss.length} sesi${ss.length===1?'ón':'ones'} · carga ${ld.toLocaleString('es-AR')} UA</div>`:''}</div>${rowActs('micros',c.id)}</div>`};
- let out=h;
- ms.forEach(m=>{const own=mcs.filter(c=>inRange(c.start,m));const weeks=Math.round((daysBetween(m.start,m.end)+1)/7);
-  out+=`<div class="panel"><div class="meso-head"><div class="ttl"><div><div class="eyebrow">Mesociclo ${mesoNum(m)}${m.phase?' · '+esc(m.phase):''}</div><h4>${esc(m.name)}</h4><div class="mono" style="font-size:13px;color:var(--muted)">${fdy(m.start)} – ${fdy(m.end)} · ${weeks} semana${weeks!==1?'s':''} · ${own.length} microciclo${own.length!==1?'s':''}</div></div>${rowActs('mesos',m.id)}</div>${m.objective?`<div style="white-space:pre-wrap;font-size:14px">${esc(m.objective)}</div>`:''}</div>
-  ${own.length?own.map(microBlock).join(''):`<div style="padding:12px 16px;color:var(--muted);font-size:14px">Sin microciclos todavía. <button class="linkbtn" type="button" data-act="add" data-col="micros" data-date="${m.start}">+ Microciclo</button></div>`}</div>`});
+ if(!ms.length&&!mcs.length)return h+`<div class="empty"><strong>Armá la temporada</strong><p>Empezá por un mesociclo (por ejemplo, la pretemporada) y dividilo en microciclos de partido a partido. Después creá las sesiones de cada microciclo.</p><div class="tools" style="justify-content:center"><button class="btn primary" type="button" data-act="gyear">Armar la temporada con la guía</button><button class="btn" type="button" data-act="planadd">+ Agregar</button></div></div>`;
+ const NUM=sessNums(),t=today(),avg=loadAvg();
+ const microBlock=c=>{const ss=S.sessions.filter(s=>inRange(s.date,c));const ld=microLoad(c);const cur=inRange(t,c);const mm=microMatches(c);
+  const matchTxt=mm.length?mm.map(m=>`vs ${esc(m.rival)}${m.venue?' ('+esc(m.venue.toLowerCase())+')':''} · ${DOW[parse(m.date).getDay()]} ${fd(m.date)}`).join(' · '):c.match?esc(c.match):'';
+  const lc=loadCmp(c,avg);
+  return `<div class="mc click${cur?' cur':''}" data-act="micro" data-id="${c.id}"><div class="k">MC ${microNum(c)}<small>${fd(c.start)}–${fd(c.end)}</small>${cur?'<span class="pill acc">Esta semana</span>':''}</div>
+  <div class="main" style="min-width:0"><div class="t" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${c.type?`<span class="pill acc">${esc(c.type)}</span>`:''}${matchTxt?`<span style="font-weight:600">${matchTxt}</span>`:''}</div>${c.focus?`<div style="font-size:14px;margin-top:2px">${esc(c.focus)}</div>`:''}
+  ${dayGrid(c,NUM)}
+  <div class="mc-foot">${ss.length} sesi${ss.length===1?'ón':'ones'}${ld?` · carga ${ld.toLocaleString('es-AR')} (RPE × min)`:''}${lc?`<span class="mc-load">${lc}</span>`:''}</div></div></div>`};
+ let out=h+seasonBar();
+ ms.forEach(m=>{const own=mcs.filter(c=>inRange(c.start,m));const weeks=Math.round((daysBetween(m.start,m.end)+1)/7);const past=m.end<t;const cur=inRange(t,m);
+  out+=`<details class="panel meso" id="meso-${m.id}" ${past?'':'open'}><summary class="meso-head"><div class="ttl"><div><div class="eyebrow">Mesociclo ${mesoNum(m)}${m.phase?' · '+esc(m.phase):''}${cur?' · en curso':past?' · terminado':''}</div><h4>${esc(m.name)}</h4><div class="mono" style="font-size:13px;color:var(--muted)">${fdy(m.start)} – ${fdy(m.end)} · ${weeks} semana${weeks!==1?'s':''} · ${own.length} microciclo${own.length!==1?'s':''}</div></div><button class="btn ghost sm" type="button" data-act="meso" data-id="${m.id}">Opciones</button></div>${m.objective?`<div style="white-space:pre-wrap;font-size:14px">${esc(m.objective)}</div>`:''}</summary>
+  ${own.length?own.map(microBlock).join(''):`<div style="padding:12px 16px;color:var(--muted);font-size:14px">Sin microciclos todavía. <button class="linkbtn" type="button" data-act="add" data-col="micros" data-date="${m.start}">+ Microciclo</button></div>`}</details>`});
  const orphan=mcs.filter(c=>!ms.some(m=>inRange(c.start,m)));
  if(orphan.length)out+=`<div class="panel"><div class="meso-head"><h4>Microciclos sin mesociclo</h4><div style="font-size:13px;color:var(--muted)">Creá un mesociclo que cubra estas fechas para agruparlos.</div></div>${orphan.map(microBlock).join('')}</div>`;
  const loose=S.sessions.filter(s=>!microOf(s.date)).length;
- if(loose&&mcs.length)out+=`<p style="margin:0;font-size:13px;color:var(--muted)">${loose} sesión${loose>1?'es':''} con fecha fuera de los microciclos. Las ves en la pestaña Sesiones.</p>`;
+ if(loose&&mcs.length)out+=`<p style="margin:0;font-size:13px;color:var(--muted)">${loose} sesi${loose>1?'ones':'ón'} con fecha fuera de los microciclos. Las ves en la pestaña Sesiones.</p>`;
  return out;
+}
+function openPlanAdd(){
+ $('#mTitle').textContent='Agregar';
+ $('#mBody').innerHTML=`<div class="pick3">${[['mesos','Mesociclo','Una etapa de varias semanas: pretemporada, competitivo…'],['micros','Microciclo','De partido a partido, o una semana en pretemporada.'],['sessions','Sesión','Un entrenamiento con sus tareas.']].map(o=>`<button class="pick" type="button" data-act="add" data-col="${o[0]}"><b>${o[1]}</b><span>${o[2]}</span></button>`).join('')}</div>`;
+ showModal();
+}
+function openMeso(id){
+ const m=S.mesos.find(x=>x.id===id);if(!m)return;const own=S.micros.filter(c=>inRange(c.start,m));const ld=own.reduce((a,c)=>a+microLoad(c),0);const ss=S.sessions.filter(s=>inRange(s.date,m)).length;
+ $('#mTitle').textContent='Mesociclo '+mesoNum(m);
+ $('#mBody').innerHTML=`<div class="det-sec" style="margin-top:0"><div style="font-family:var(--f-display);font-size:26px;font-weight:700;text-transform:uppercase;line-height:1.05">${esc(m.name)}</div><div class="mini" style="margin-top:10px">${[['Etapa',m.phase],['Fechas',fdy(m.start)+' – '+fdy(m.end)],['Microciclos',String(own.length)],['Sesiones',String(ss)],['Carga total',ld?ld.toLocaleString('es-AR')+' (RPE × min)':'']].filter(x=>x[1]).map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span>${esc(f[1])}</span></div>`).join('')}</div></div>
+ ${m.objective?`<div class="det-sec"><h4>Objetivos</h4><div style="white-space:pre-wrap">${esc(m.objective)}</div></div>`:''}${m.notes?`<div class="det-sec"><h4>Notas</h4><div style="white-space:pre-wrap">${esc(m.notes)}</div></div>`:''}
+ <div class="formacts"><button class="btn danger" type="button" data-act="del" data-col="mesos" data-id="${id}">Borrar</button><button class="btn" type="button" data-act="add" data-col="micros" data-date="${m.start}">+ Microciclo</button><button class="btn primary" type="button" data-act="edit" data-col="mesos" data-id="${id}">Editar</button></div>`;
+ showModal();
+}
+function nextMicro(c){const L=sortStart(S.micros);const i=L.findIndex(x=>x.id===c.id);return i>=0?L[i+1]:null}
+function openMicro(id){
+ const c=S.micros.find(x=>x.id===id);if(!c)return;const NUM=sessNums();const mm=microMatches(c);const lc=loadCmp(c,loadAvg());
+ const areas=MICRO_AREAS.filter(a=>c[a[0]]);
+ $('#mTitle').textContent=`Microciclo ${microNum(c)} · ${fd(c.start)}–${fd(c.end)}`;
+ $('#mBody').innerHTML=`<div class="mini">${[['Tipo',esc(c.type||'')],['Partido',mm.map(m=>`vs ${esc(m.rival)} · ${DOW[parse(m.date).getDay()]} ${fd(m.date)}${m.time?' · '+esc(m.time)+' h':''}`).join('<br>')||esc(c.match||'')],['Carga',lc]].filter(x=>x[1]).map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span class="mc-load" style="margin:0">${f[1]}</span></div>`).join('')}</div>
+ ${c.focus?`<div class="det-sec"><h4>Objetivo general</h4><div>${esc(c.focus)}</div></div>`:''}
+ ${areas.length?`<div class="det-sec"><h4>Objetivos por área</h4><div class="mini">${areas.map(a=>`<div style="display:grid;gap:2px"><span style="color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em">${a[1]}</span><span style="white-space:pre-wrap">${esc(c[a[0]])}</span></div>`).join('')}</div></div>`:''}
+ <div class="det-sec"><h4>Día por día</h4>${dayGrid(c,NUM)}</div>
+ ${c.notes?`<div class="det-sec"><h4>Notas</h4><div style="white-space:pre-wrap">${esc(c.notes)}</div></div>`:''}
+ <div class="formacts"><button class="btn danger" type="button" data-act="del" data-col="micros" data-id="${id}">Borrar</button><button class="btn" type="button" data-act="gmicro" data-id="${id}">Sesiones guía</button><button class="btn" type="button" data-act="mcopy" data-id="${id}">Copiar al siguiente</button><button class="btn" type="button" data-act="msheet" data-id="${id}">Planilla semanal</button><button class="btn primary" type="button" data-act="edit" data-col="micros" data-id="${id}">Editar</button></div>`;
+ showModal();
+}
+function copyMicro(btn){
+ const c=S.micros.find(x=>x.id===btn.dataset.id);if(!c)return;const nx=nextMicro(c);
+ if(!nx){toast('No hay un microciclo siguiente: crealo primero.');return}
+ const src=sessOrder().filter(s=>inRange(s.date,c));if(!src.length){toast('Este microciclo no tiene sesiones para copiar.');return}
+ const have=S.sessions.filter(s=>inRange(s.date,nx)).length;
+ if(have&&!btn.classList.contains('armed')){btn.classList.add('armed');btn.textContent=`El siguiente ya tiene ${have}. ¿Copiar igual?`;setTimeout(()=>{btn.classList.remove('armed');btn.textContent='Copiar al siguiente'},5000);return}
+ const off=daysBetween(c.start,nx.start),now=new Date().toISOString();let n=0;
+ src.forEach(s=>{const d=addDays(s.date,off);if(d>nx.end)return;const body={...s,date:d,squad:s.squad||sq(),by:me.uid,at:now};['id','att','attendance','rpe','shareId','editBy','editAt'].forEach(k=>delete body[k]);setDoc(doc(collection(db,'sessions')),body).catch(err=>toast(errMsg(err)));n++});
+ closeModal();toast(`${n} ${plural(n,'sesión copiada','sesiones copiadas')} al microciclo ${microNum(nx)}`);
+}
+function microSheetData(c){const NUM=sessNums();return microDays(c).map(d=>{const code=mdCode(d);const ss=sessOrder().filter(s=>s.date===d);const m=S.matches.find(x=>x.date===d);return {d,code,ss,m,NUM}})}
+function openMicroSheet(id){
+ const c=S.micros.find(x=>x.id===id);if(!c)return;const rows=microSheetData(c);const mm=microMatches(c);const areas=MICRO_AREAS.filter(a=>c[a[0]]);
+ const meta=[['Fechas',fdy(c.start)+' – '+fdy(c.end)],['Tipo',c.type],['Carga planificada',c.plannedLoad],['Partido',mm.map(m=>`vs ${m.rival} · ${DOW[parse(m.date).getDay()]} ${fd(m.date)}${m.time?' · '+m.time+' h':''}`).join(' · ')||c.match]].filter(x=>x[1]);
+ const html=`${sheetHead('Microciclo '+microNum(c)+(squads().length>1?' · '+esc(sqName()):''))}
+ <div class="sh-meta">${meta.map(m=>`<div><span class="k">${m[0]}</span><b>${esc(m[1])}</b></div>`).join('')}</div>
+ ${c.focus?`<div class="sh-sec"><h4>Objetivo</h4><p style="margin:0">${esc(c.focus)}</p></div>`:''}
+ ${areas.length?`<div class="sh-sec"><h4>Objetivos por área</h4><div class="sh-areas">${areas.map(a=>`<div><span class="k">${a[1]}</span><div style="white-space:pre-wrap">${esc(c[a[0]])}</div></div>`).join('')}</div></div>`:''}
+ <div class="sh-sec"><h4>Día por día</h4><div class="tablewrap sh-table"><table><thead><tr><th>Día</th><th></th><th>Hora</th><th>Sesión</th><th class="r">Min</th></tr></thead><tbody>${rows.map(r=>r.m?`<tr class="sh-match"><td><b>${DOW[parse(r.d).getDay()]} ${fd(r.d)}</b></td><td>MD</td><td class="num">${esc(r.m.time||'')}</td><td colspan="2"><b>Partido vs ${esc(r.m.rival)}</b>${r.m.venue?' · '+esc(r.m.venue):''}</td></tr>`:r.ss.length?r.ss.map((s,i)=>`<tr><td>${i?'':`<b>${DOW[parse(r.d).getDay()]} ${fd(r.d)}</b>`}</td><td>${i?'':esc(r.code)}</td><td class="num">${esc(s.time||'')}</td><td><b>N° ${r.NUM[s.id]} · ${esc(s.type||'Sesión')}</b>${s.focus?`<div style="color:var(--muted)">${esc(s.focus)}</div>`:''}</td><td class="r num">${sessDuration(s)||''}</td></tr>`).join(''):`<tr><td><b>${DOW[parse(r.d).getDay()]} ${fd(r.d)}</b></td><td>${esc(r.code)}</td><td></td><td style="color:var(--muted)">Libre</td><td></td></tr>`).join('')}</tbody></table></div></div>`;
+ const txt=[`Microciclo ${microNum(c)} (${fd(c.start)} al ${fd(c.end)})${c.focus?'\n'+c.focus:''}`,...rows.map(r=>`${DOW[parse(r.d).getDay()]} ${fd(r.d)}${r.code?' · '+r.code:''}: `+(r.m?`Partido vs ${r.m.rival}${r.m.time?' '+r.m.time+' h':''}`:r.ss.length?r.ss.map(s=>`${s.time?s.time+' h ':''}${s.type||'Sesión'}${s.focus?' ('+s.focus+')':''}`).join(' / '):'Libre'))].join('\n');
+ openDoc(html,`<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools"><a class="btn primary" href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener">Enviar por WhatsApp</a><button class="btn" type="button" data-act="print">Descargar PDF</button></div></div>`);
 }
 
 /* ---------- guía de planificación ---------- */
@@ -1046,7 +1150,7 @@ function createYear(e){
  const pl=gySum();if(!pl){toast('Revisá las fechas.');return}
  let nm=0,nc=0,skip=0;const fail=err=>{if(err&&err.code==='permission-denied')toast('Falta actualizar las reglas de Firebase para guardar la planificación.')};
  pl.mesos.forEach(m=>{if(S.mesos.some(v=>v.start===m.start&&v.end===m.end))return;setDoc(doc(collection(db,'mesos')),{...m,notes:'',squad:sq()}).catch(fail);nm++});
- pl.micros.forEach(c=>{if(S.micros.some(v=>v.start<=c.end&&v.end>=c.start)){skip++;return}setDoc(doc(collection(db,'micros')),{...c,notes:'',squad:sq()}).catch(fail);nc++});
+ pl.micros.forEach(c=>{if(S.micros.some(v=>v.start<=c.end&&v.end>=c.start)){skip++;return}setDoc(doc(collection(db,'micros')),{...c,plannedLoad:TYPE_LOAD[c.type]||'',notes:'',squad:sq()}).catch(fail);nc++});
  closeModal();tab='plan';saveGuide({matchDay:p.matchDay,match2:p.match2,trainDays:p.trainDays,time:p.time});
  toast(`Temporada armada: ${nm} mesociclos y ${nc} microciclos.`+(skip?` ${skip} semanas ya tenían microciclo y no se tocaron.`:''));window.scrollTo({top:0});
 }
@@ -1403,7 +1507,13 @@ document.addEventListener('click',e=>{
  const a=b.dataset.act;
  if(a==='menu'){const o=$('#nav').classList.toggle('open');b.setAttribute('aria-expanded',o);$('#menuLbl').textContent=o?'Cerrar':'Menú'}
  else if(a==='tab'){$('#nav').classList.remove('open');$('#menuLbl').textContent='Menú';tab=b.dataset.k;try{localStorage.setItem('ct_tab',tab)}catch(_){};render();window.scrollTo({top:0})}
- else if(a==='add'){e.stopPropagation();openForm(b.dataset.col,null,{pre:b.dataset.pre,date:b.dataset.date})}
+ else if(a==='add'){e.stopPropagation();e.preventDefault();openForm(b.dataset.col,null,{pre:b.dataset.pre,date:b.dataset.date})}
+ else if(a==='planadd')openPlanAdd();
+ else if(a==='meso'){e.preventDefault();e.stopPropagation();openMeso(b.dataset.id)}
+ else if(a==='micro')openMicro(b.dataset.id);
+ else if(a==='mcopy')copyMicro(b);
+ else if(a==='msheet'){closeModal();openMicroSheet(b.dataset.id)}
+ else if(a==='mesogo'){const d=document.getElementById('meso-'+b.dataset.id);if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'})}}
  else if(a==='edit'){e.stopPropagation();let key=b.dataset.col;if(key==='routines'){const r=S.routines.find(x=>x.id===b.dataset.id);if(r&&isGym(r))key='gymroutines'}closeDoc();openForm(key,b.dataset.id)}
  else if(a==='dup'){closeDoc();openForm('sessions',null,{copy:b.dataset.id})}
  else if(a==='del'){e.stopPropagation();del(b)}
