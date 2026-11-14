@@ -120,8 +120,8 @@ select.flt{border:1px solid var(--line);background:var(--surface);border-radius:
 .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
 @media (max-width:760px){.cols{grid-template-columns:minmax(0,1fr)}}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;min-width:0}
-.panel>h3,.cx-panel>summary>h3{margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font-family:var(--f-display);font-size:18px;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:center;gap:8px}
-.panel>h3 small,.cx-panel>summary>h3 small{font-family:var(--f-body);text-transform:none;letter-spacing:0;font-size:13px;color:var(--muted);font-weight:500}
+.panel>h3,.cx-panel>summary>h3,.g-help>summary>h3{margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font-family:var(--f-display);font-size:18px;text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.panel>h3 small,.cx-panel>summary>h3 small,.g-help>summary>h3 small{font-family:var(--f-body);text-transform:none;letter-spacing:0;font-size:13px;color:var(--muted);font-weight:500}
 .panel .body{padding:14px 16px}
 .match-card{display:grid;gap:4px}
 .col{display:grid;gap:18px;min-width:0}
@@ -360,6 +360,21 @@ tr.sh-match td{background:var(--warn-soft)}
 .md-day.off{background:var(--sunk)}
 .row.cx{background:var(--sunk)}.row.cx .t{color:var(--muted)}
 .cx-n{color:var(--warn)}
+details.cx-panel>summary,details.g-help>summary{list-style:none;cursor:pointer}details.g-help>summary::-webkit-details-marker{display:none}
+details.g-help>summary h3 small::after{content:'▸ Ver'}details.g-help[open]>summary h3 small::after{content:'▾ Ocultar'}details.g-help:not([open])>summary h3{border-bottom:0}
+.gnav{display:grid;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.gnav-g{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap}.gnav-g+.gnav-g{border-top:1px solid var(--line);padding-top:8px}
+.gnav-l{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;width:96px;flex:none}
+.gnav-m{display:none}
+@media (max-width:560px){.gnav{display:none}.gnav-m{display:grid}}
+.g-addnote{margin:-4px 0 0}.g-notes{border-left:3px solid var(--accent)}
+.g-h{margin:6px 0 -4px;font-family:var(--f-display);font-size:20px;text-transform:uppercase;letter-spacing:.03em}
+tr.g-today td{background:var(--accent-soft)}
+.g-table.g-real table{min-width:0;width:100%}.g-real .linkbtn{text-align:left}.g-real th,.g-real td{white-space:normal}.g-real td:first-child{white-space:nowrap}
+@media (max-width:560px){.g-real td:first-child{white-space:normal}.g-real td:first-child .pill{display:inline-block;margin-top:3px}.g-real th,.g-real td{padding-left:10px;padding-right:10px}}
+.ga-task{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--sunk);font-size:14px;display:grid;gap:4px}
+.dt-row{align-items:center}.dt-pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.sh-stage{break-inside:avoid;margin:0 0 10px}.sh-stage h4{margin:8px 0 4px;font-size:15px}.sh-stage h4 small{font-weight:400;color:var(--muted)}.sh-stage p{margin:2px 0;font-size:13px}
 details.cx-panel>summary{list-style:none;cursor:pointer}details.cx-panel>summary::-webkit-details-marker{display:none}
 details.cx-panel>summary h3 small::after{content:'  ▸ Ver'}details.cx-panel[open]>summary h3 small::after{content:'  ▾'}details.cx-panel:not([open])>summary h3{border-bottom:0}
 .cx-why{display:grid;gap:6px}.cx-why label{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer;font-size:15px;text-transform:none;letter-spacing:0;color:var(--ink);font-weight:400}
@@ -571,6 +586,6 @@ details.g-det h5{margin:0}
 <div id="big" hidden role="dialog" aria-label="Sesión en pantalla grande"></div>
 <div class="toast" id="toast" hidden></div>
 
-<script type="module" src="app.js?v=13"></script>
+<script type="module" src="app.js?v=14"></script>
 </body>
 </html>
