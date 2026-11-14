@@ -25,4 +25,11 @@ window.__store=window.__store||{
  plinks:{demoJugador123456789:{player:'p2',name:'Jugador Ejemplo 2',club:'Primera (ejemplo)',routines:[],next:[{date:D(1),time:'19:00',type:'Pre-partido'}],updatedAt:T(0)}},
  checkins:{kc1:{token:'x',player:'p2',kind:'conf',date:D(1),at:T(0),activity:'No voy · Trabajo',note:'Salgo tarde del laburo'},kc2:{token:'x',player:'p4',kind:'conf',date:D(1),at:T(0),activity:'Voy',note:''},k1:{token:'x',player:'p0',kind:'well',date:D(0),at:T(0),sleep:4,fatigue:4,soreness:3,stress:5,painZone:'',note:''},k2:{token:'x',player:'p3',kind:'well',date:D(0),at:T(0),sleep:2,fatigue:2,soreness:3,stress:3,painZone:'gemelo izquierdo',note:'Dormí poco'},k3:{token:'x',player:'p6',kind:'well',date:D(0),at:T(0),sleep:5,fatigue:4,soreness:4,stress:4,painZone:'',note:''},k4:{token:'x',player:'p0',kind:'rpe',date:D(-2),at:T(-2),activity:'Equipo',rpe:6,minutes:70,note:''},k5:{token:'x',player:'p6',kind:'rpe',date:D(-2),at:T(-2),activity:'Equipo',rpe:7,minutes:70,note:''}}
 };
+/* historial de bienestar y RPE para la vista previa */
+(()=>{const C=window.__store.checkins;let r=7;const rnd=()=>{r=(r*9301+49297)%233280;return r/233280};
+ for(let n=-27;n<=-1;n++){for(let i=0;i<12;i++){if(i===9||rnd()<0.18)continue;const base=i===3?4:3.6;const v=()=>Math.max(1,Math.min(5,Math.round(base+rnd()*1.6-0.6)));
+  C['gw'+i+'_'+(n+30)]={token:'x',player:'p'+i,kind:'well',date:D(n),at:T(n),sleep:v(),fatigue:v(),soreness:v(),stress:v(),painZone:i===5&&n>=-2?'isquiotibial derecho':'',note:''};
+  if(new Date(D(n)+'T12:00').getDay()!==0&&new Date(D(n)+'T12:00').getDay()!==6&&rnd()<0.8)C['gr'+i+'_'+(n+30)]={token:'x',player:'p'+i,kind:'rpe',date:D(n),at:T(n),activity:'Equipo',rpe:Math.round(4+rnd()*3),minutes:i===6&&n>=-7?110:70,note:''};}}
+ C.k5w={token:'x',player:'p5',kind:'well',date:D(0),at:T(0),sleep:4,fatigue:3,soreness:2,stress:4,painZone:'isquiotibial derecho',note:'Molestia al acelerar'};
+})();
 })();

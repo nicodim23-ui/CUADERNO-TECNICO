@@ -14,7 +14,7 @@ let club={name:''}, access=null, members={}, me=null, tab='resumen', testFilter=
 const pubMatch=location.hash.match(/^#r-([A-Za-z0-9]{12,40})$/);
 const plMatch=location.hash.match(/^#j-([A-Za-z0-9]{12,40})$/);
 const publicMode=!!(pubMatch||plMatch);
-let wellDate='', guideTab=(()=>{try{return localStorage.getItem('ct_gtab')||'year'}catch(_){return 'year'}})();
+let wellDate='', wellView='dia', wellSpan=14, guideTab=(()=>{try{return localStorage.getItem('ct_gtab')||'year'}catch(_){return 'year'}})();
 const $=s=>document.querySelector(s);
 
 /* ---------- Firebase ---------- */
@@ -406,6 +406,9 @@ function pendings(NUM){
    const lt=AS.filter(s=>s.date.slice(0,7)===mo&&attMap(s)[p.id]==='T').length;if(lt>=3)lates.push(`${p.name} (${lt})`)});
   if(strk.length)out.push({txt:`${strk.length} ${plural(strk.length,'jugador faltó','jugadores faltaron')} a 2 o más sesiones seguidas`,names:strk,act:'tab',k:'att',btn:'Ir a Asistencia'});
   if(lates.length)out.push({txt:`${lates.length} ${plural(lates.length,'jugador llegó','jugadores llegaron')} tarde 3 veces o más este mes`,names:lates,act:'tab',k:'att',btn:'Ir a Asistencia'});}
+ {const wl=[],up=[];sortedPlayers().forEach(p=>{const w=wellOf(p.id,t);const f=wellFlags(p.id,t,w);if(f.length)wl.push(`${p.name} (${f.map(x=>x[1].toLowerCase()).join(', ')})`);const r=acwr(p.id,t).r;if(r!=null&&r>1.5)up.push(`${p.name} (×${r.toFixed(1).replace('.',',')})`)});
+  if(wl.length)out.push({txt:`${wl.length} ${plural(wl.length,'alerta','alertas')} de bienestar hoy`,names:wl,act:'tab',k:'well',btn:'Ir a Bienestar'});
+  if(up.length)out.push({txt:`${up.length} ${plural(up.length,'jugador subió','jugadores subieron')} la carga de golpe esta semana`,names:up,act:'tab',k:'well',btn:'Ir a Bienestar'});}
  const apt=sortedPlayers().filter(p=>p.apto&&daysBetween(t,p.apto)<=15);
  if(apt.length)out.push({txt:`${apt.length} ${plural(apt.length,'apto médico vencido o por vencer','aptos médicos vencidos o por vencer')}`,names:apt.map(p=>`${p.name} (${daysBetween(t,p.apto)<0?'venció':'vence'} ${fd(p.apto)})`),act:'tab',k:'players',btn:'Ir a Plantel'});
  const noIft=sortedPlayers().filter(p=>!isGK(p)&&!lastTest(p.id,['30-15 IFT','30-15']));
@@ -646,7 +649,8 @@ function openPlayer(id){
  <div class="det-sec"><h4>Contacto y salud</h4>${health.length?`<div class="mini">${health.map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span>${f[1]}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin datos cargados.</div>'}</div>
  ${p.notes?`<div class="det-sec"><h4>Observaciones</h4><div style="white-space:pre-wrap">${esc(p.notes)}</div></div>`:''}
  <div class="det-sec"><h4>Asistencia</h4>${playerAttHTML(id,as)}</div>
- <div class="det-sec"><h4>Bienestar y RPE (lo carga el jugador)</h4>${(()=>{const L=S.checkins.filter(c=>c.player===id).sort(byDateDesc).slice(0,6);return L.length?`<div class="mini">${L.map(c=>c.kind==='well'?`<div><span>${fdy(c.date)} · Bienestar${c.painZone?' · dolor: '+esc(c.painZone):''}</span><span>${WELL.map(w=>`${w[1]} <b class="num">${c[w[0]]??'–'}</b>`).join(' · ')} · <b class="num">${wellTotal(c)} de 20</b></span></div>`:`<div><span>${fdy(c.date)} · ${esc(c.activity||'')}</span><span>RPE <b class="num">${esc(c.rpe)}</b>${isNum(c.minutes)?` · ${c.minutes} min · carga <b class="num">${Math.round(c.rpe*c.minutes)}</b>`:''}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Todavía no cargó nada. Mandale su link.</div>'})()}</div>
+ <div class="det-sec"><h4>Bienestar últimos 14 días</h4>${wellGridPlayer(id)}</div>
+ <div class="det-sec"><h4>Bienestar y RPE (lo carga el jugador)</h4>${(()=>{const L=S.checkins.filter(c=>c.player===id&&(c.kind==='well'||c.kind==='rpe')).sort(byDateDesc).slice(0,6);return L.length?`<div class="mini">${L.map(c=>c.kind==='well'?`<div><span>${fdy(c.date)} · Bienestar${c.painZone?' · dolor: '+esc(c.painZone):''}</span><span>${WELL.map(w=>`${w[1]} <b class="num">${c[w[0]]??'–'}</b>`).join(' · ')} · <b class="num">${wellTotal(c)} de 20</b></span></div>`:`<div><span>${fdy(c.date)} · ${esc(c.activity||'')}</span><span>RPE <b class="num">${esc(c.rpe)}</b>${isNum(c.minutes)?` · ${c.minutes} min · carga <b class="num">${Math.round(c.rpe*c.minutes)}</b>`:''}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Todavía no cargó nada. Mandale su link.</div>'})()}</div>
  <div class="det-sec"><h4>Gimnasio</h4>${gr.length?`<div style="margin-bottom:8px;font-size:14px">Rutinas asignadas: ${gr.map(r=>`<button class="linkbtn" type="button" data-act="rsheet" data-id="${r.id}">${esc(r.name)}</button>`).join(' · ')}</div>`:''}${gl.length?`<div class="mini">${gl.map(g=>{const r=S.routines.find(x=>x.id===g.routine);return `<div><span>${fdy(g.date)} · ${esc(r?r.name:(g.done||'Gimnasio').split('\n')[0])}</span><span class="num" style="color:var(--muted)">${[isNum(g.duration)?g.duration+' min':'',isNum(g.rpe)?'RPE '+g.rpe:''].filter(Boolean).join(' · ')}</span></div>`}).join('')}</div>`:'<div style="color:var(--muted)">Sin registros de gimnasio.</div>'}</div>
  <div class="det-sec"><h4>Tests · último resultado</h4>${TT.length?`<div class="mini">${TT.map(x=>`<div><span>${esc(x.a.test)} · <span class="num" style="color:var(--muted)">${fdy(x.a.date)}</span></span><span><b class="num">${esc(String(x.a.value).replace('.',','))} ${esc(x.a.unit||'')}</b> ${x.tr}</span></div>`).join('')}</div>${tests.length>TT.length?`<details class="miss"><summary>Ver todas las mediciones (${tests.length})</summary><div class="mini" style="margin-top:6px">${tests.map(t=>`<div><span>${esc(t.test)} · <span class="num" style="color:var(--muted)">${fdy(t.date)}</span></span><span class="num">${esc(t.value)} ${esc(t.unit||'')}</span></div>`).join('')}</div></details>`:''}`:'<div style="color:var(--muted)">Sin mediciones.</div>'}</div>
  <div class="det-sec"><h4>Lesiones (${inj.length})</h4>${inj.length?`<div class="mini">${inj.map(i=>`<div><span>${esc(i.zone||'')} ${i.kind?'· '+esc(i.kind):''} · <span class="num" style="color:var(--muted)">${fdy(i.date)}</span></span><span class="pill ${i.status==='Activa'?'warn':i.status==='Alta'?'ok':'amber'}">${esc(i.status||'')}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin lesiones registradas.</div>'}</div>
@@ -1450,7 +1454,7 @@ function attPdf(){const {ss,rows,cols}=attTableData();const keep=cols.filter((c,
 function playerAttHTML(id,as){
  const AS=sessOrder().filter(s=>!s.cancel&&hasAtt(s)&&attMap(s)[id]).reverse();if(!AS.length)return '<div style="color:var(--muted)">Sin registros de asistencia.</div>';
  const first=attMap(AS[0])[id];let n=0;const pres=x=>x==='P'||x==='T';for(const s of AS){const v=attMap(s)[id];if(v==='L')continue;if(pres(v)===pres(first)||first==='L')n++;else break}
- const streak=first==='L'?'':pres(first)?`Viene a las últimas ${n} sesiones`:`Faltó a las últimas ${n} sesiones`;
+ const streak=first==='L'?'':n===1?(pres(first)?'Vino a la última sesión':'Faltó a la última sesión'):pres(first)?`Vino a las últimas ${n} sesiones`:`Faltó a las últimas ${n} sesiones`;
  const abs=AS.filter(s=>isAbs(attMap(s)[id])).slice(0,5);const mo=today().slice(0,7);const lt=AS.filter(s=>s.date.slice(0,7)===mo&&attMap(s)[id]==='T');const ltm=lt.reduce((a,s)=>a+(s.late&&isNum(s.late[id])?+s.late[id]:0),0);
  return `<div class="mini">${[['Últimos 30 días',as.pct!=null?as.pct+' % ('+as.n+' sesiones)':'—'],['Racha',streak],['Tarde este mes',lt.length?lt.length+(ltm?` (${ltm} min)`:''):'']].filter(x=>x[1]).map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span>${esc(f[1])}</span></div>`).join('')}</div>
  ${abs.length?`<div style="margin-top:8px;font-size:14px"><span style="color:var(--muted)">Últimas ausencias:</span> ${abs.map(s=>`${DOW[parse(s.date).getDay()]} ${fd(s.date)} (${esc((ATT_LABEL[attMap(s)[id]]||'').replace('Justificada · ','').toLowerCase())})`).join(' · ')}</div>`:''}`;
@@ -1810,21 +1814,92 @@ function bigToggle(){
 }
 
 /* ---------- bienestar y RPE de los jugadores ---------- */
+/* ---------- bienestar: cálculos ---------- */
+const wellList=pid=>S.checkins.filter(c=>c.kind==='well'&&c.player===pid);
+function wellBase(pid,d){const from=addDays(d,-21);const L=wellList(pid).filter(c=>c.date<d&&c.date>=from);const by={};L.forEach(c=>{if(!by[c.date]||(c.at||'')>(by[c.date].at||''))by[c.date]=c});const v=Object.values(by);return v.length>=5?v.reduce((a,c)=>a+wellTotal(c),0)/v.length:null}
+const noAcc=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+const painKey=z=>{const w=noAcc(z).split(/[^a-zñ]+/).filter(x=>x.length>3&&!['derecho','derecha','izquierdo','izquierda','zona','dolor','poco','leve','molestia','musculo'].includes(x));return w[0]||''};
+function painRepeat(pid,d){const from=addDays(d,-6);const days={};wellList(pid).filter(c=>c.date>=from&&c.date<=d&&c.painZone).forEach(c=>{const k=painKey(c.painZone);if(k)(days[k]=days[k]||new Set()).add(c.date)});const best=Object.entries(days).sort((a,b)=>b[1].size-a[1].size)[0];return best&&best[1].size>=3?{k:best[0],n:best[1].size}:null}
+function painRanking(d){const from=addDays(d,-13);const m={};S.checkins.filter(c=>c.kind==='well'&&c.painZone&&c.date>=from&&c.date<=d&&pl(c.player)).forEach(c=>{const k=painKey(c.painZone);if(!k)return;(m[k]=m[k]||{n:0,ps:new Set(),label:c.painZone}).n++;m[k].ps.add(c.player)});return Object.entries(m).map(([k,v])=>({k,n:v.n,ps:v.ps.size,label:v.label})).sort((a,b)=>b.n-a.n).slice(0,6)}
+function wellFlags(pid,d,w){const f=[];if(!w)return f;if(WELL.some(x=>+w[x[0]]<=2))f.push(['warn','Algún valor en 1 o 2']);const b=wellBase(pid,d);if(b!=null&&b-wellTotal(w)>=3)f.push(['warn',`${Math.round(b-wellTotal(w))} puntos bajo su promedio`]);const pr=painRepeat(pid,d);if(pr)f.push(['amber',`Dolor repetido: ${pr.k} (${pr.n} días)`]);return f}
+/* carga individual: última semana contra el promedio de las 4 anteriores */
+function acwr(pid,d){const L=S.checkins.filter(c=>c.kind==='rpe'&&c.player===pid&&isNum(c.rpe)&&isNum(c.minutes));const sum=(a,b)=>L.filter(c=>c.date>a&&c.date<=b).reduce((x,c)=>x+c.rpe*c.minutes,0);
+ const a=sum(addDays(d,-7),d);const wk=[1,2,3,4].map(i=>sum(addDays(d,-7*(i+1)),addDays(d,-7*i)));const withData=wk.filter(x=>x>0).length;const ch=withData?wk.reduce((x,y)=>x+y,0)/withData:0;
+ return {a:Math.round(a),ch:Math.round(ch),r:withData>=3&&ch>0?a/ch:null,withData}}
+const acwrState=r=>r==null?['','Pocos datos']:r>1.5?['warn','Subió de golpe']:r<0.8?['amber','Bajó']:['ok','Estable'];
+const wcl=t=>t==null?'':t<=11?'lo':t<=14?'mid':'hi';
+/* ---------- bienestar: vista ---------- */
 function vWell(){
  const d=wellDate||today();
- const h=`<div class="bar"><div><h2>Bienestar y RPE</h2><p>Lo carga cada jugador desde su link personal, sin cuenta. Escala de 1 (mal) a 5 (muy bien).</p></div><div class="tools"><input class="flt" type="date" id="wellDate" value="${d}" max="${today()}" aria-label="Fecha"><button class="btn primary" type="button" data-act="links">Links de los jugadores</button></div></div>`;
+ const h=`<div class="bar"><div><h2>Bienestar y RPE</h2><p>Lo carga cada jugador desde su link personal, sin cuenta. Escala de 1 (mal) a 5 (muy bien).</p></div><div class="tools"><button class="btn primary" type="button" data-act="links">Links de los jugadores</button></div></div>`;
  if(!S.players.length)return h+empty('Sin jugadores','Cargá el plantel para generar el link de cada jugador.','players','Agregar jugador');
- const ps=sortedPlayers();const rows=ps.map(p=>({p,w:wellOf(p.id,d)}));const ans=rows.filter(r=>r.w);
- const alerts=ans.filter(r=>WELL.some(w=>+r.w[w[0]]<=2));const rp=rpesOf(d);
+ const code=mdCode(d);
+ const nav=`<div class="well-nav"><div class="well-day"><button class="btn sm" type="button" data-act="wday" data-v="-1" aria-label="Día anterior">←</button><input class="flt" type="date" id="wellDate" value="${d}" max="${today()}" aria-label="Fecha"><button class="btn sm" type="button" data-act="wday" data-v="1" aria-label="Día siguiente" ${d>=today()?'disabled':''}>→</button>${d!==today()?`<button class="btn ghost sm" type="button" data-act="wday" data-v="0">Hoy</button>`:''}<span class="g-sub">${DOWL[parse(d).getDay()]}${code?' · '+code:''}</span></div>
+ <div class="seg2"><label><input type="radio" name="wellview" value="dia" ${wellView==='dia'?'checked':''}><span>Día</span></label><label><input type="radio" name="wellview" value="semana" ${wellView==='semana'?'checked':''}><span>Semana</span></label><label><input type="radio" name="wellview" value="carga" ${wellView==='carga'?'checked':''}><span>Carga individual</span></label></div></div>`;
+ return h+nav+(wellView==='semana'?wellWeek(d):wellView==='carga'?wellLoad(d):wellDay(d));
+}
+function wellDay(d){
+ const ps=sortedPlayers();const rows=ps.map(p=>({p,w:wellOf(p.id,d)}));const ans=rows.filter(r=>r.w);const no=rows.filter(r=>!r.w&&availability(r.p.id)[0]!=='Lesionado');
+ rows.forEach(r=>r.f=wellFlags(r.p.id,d,r.w));const alerts=rows.filter(r=>r.f.some(x=>x[0]==='warn'));const pains=rows.filter(r=>r.f.some(x=>/Dolor repetido/.test(x[1])));const rp=rpesOf(d);
  const avg=ans.length?(ans.reduce((a,r)=>a+wellTotal(r.w),0)/ans.length).toFixed(1):'–';
+ const md1=mdCode(d)==='MD+1';const order=md1?['soreness','fatigue','sleep','stress']:WELL.map(w=>w[0]);const W=order.map(k=>WELL.find(w=>w[0]===k));
  const v=x=>`<td class="r"><span class="wv ${+x<=2?'lo':+x>=4?'hi':''}">${esc(x??'–')}</span></td>`;
  const delBtn=id=>`<button class="btn ghost sm danger" type="button" data-act="del" data-col="checkins" data-id="${id}">Borrar</button>`;
- let out=h+`<div class="stats"><div class="stat"><div class="k">Respondieron</div><div class="v">${ans.length}/${ps.length}</div><div class="s">${d===today()?'hoy':fdy(d)}</div></div><div class="stat"><div class="k">Bienestar promedio</div><div class="v">${avg}</div><div class="s">sobre 20</div></div><div class="stat"><div class="k">Alertas</div><div class="v ${alerts.length?'warn':''}">${alerts.length}</div><div class="s">con algún valor en 1 o 2</div></div><div class="stat"><div class="k">RPE cargados</div><div class="v">${rp.length}</div><div class="s">ese día</div></div></div>`;
- out+=`<div class="tablewrap"><table><thead><tr><th>Jugador</th>${WELL.map(w=>`<th class="r">${w[1]}</th>`).join('')}<th class="r">Total</th><th>Dolor / comentario</th><th></th></tr></thead><tbody>${[...rows].sort((a,b)=>(a.w?wellTotal(a.w):99)-(b.w?wellTotal(b.w):99)).map(({p,w})=>w?`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td>${WELL.map(x=>v(w[x[0]])).join('')}<td class="r num"><b>${wellTotal(w)}</b>/20</td><td style="white-space:normal;min-width:140px">${esc([w.painZone,w.note].filter(Boolean).join(' · '))}</td><td>${delBtn(w.id)}</td></tr>`:`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td><td colspan="${WELL.length+3}" style="color:var(--muted)">Sin responder</td></tr>`).join('')}</tbody></table></div>`;
+ let out=`<div class="stats"><div class="stat"><div class="k">Respondieron</div><div class="v">${ans.length}/${ps.length}</div><div class="s">${no.length?`<button class="linkbtn" type="button" data-act="wremind">Recordar a los ${no.length} que faltan</button>`:'respondieron todos'}</div></div><div class="stat"><div class="k">Bienestar promedio</div><div class="v">${avg}</div><div class="s">sobre 20</div></div><div class="stat"><div class="k">Alertas</div><div class="v ${alerts.length?'warn':''}">${alerts.length}</div><div class="s">valores en 1–2 o muy bajo su promedio</div></div><div class="stat"><div class="k">Dolor repetido</div><div class="v ${pains.length?'amber':''}">${pains.length}</div><div class="s">misma zona 3 días o más</div></div></div>`;
+ let match=null,mins={};if(md1){match=S.matches.find(m=>m.date===addDays(d,-1));S.checkins.filter(c=>c.kind==='rpe'&&c.activity==='Partido'&&c.date===addDays(d,-1)&&isNum(c.minutes)).forEach(c=>mins[c.player]=+c.minutes);
+  out+=`<div class="banner well-md1"><b>Día después del partido${match?' vs '+esc(match.rival):''}.</b> Primero dolor muscular y cansancio. ${Object.keys(mins).length?'Separados según los minutos que cargó cada uno en su RPE del partido.':'Cuando los jugadores cargan el RPE del partido con sus minutos, acá se separan los que jugaron 60 minutos o más.'}</div>`}
+ const row=({p,w,f})=>w?`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}${f.length?`<div class="wfs">${f.map(x=>`<span class="pill ${x[0]} wf">${esc(x[1])}</span>`).join('')}</div>`:''}</td>${W.map(x=>v(w[x[0]])).join('')}<td class="r num"><b>${wellTotal(w)}</b>/20</td><td style="white-space:normal;min-width:140px">${esc([w.painZone,w.note].filter(Boolean).join(' · '))}</td><td>${delBtn(w.id)}</td></tr>`:`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td><td colspan="${WELL.length+3}" style="color:var(--muted)">Sin responder</td></tr>`;
+ const sorted=L=>[...L].sort((a,b)=>(b.f.length-a.f.length)||((a.w?wellTotal(a.w):99)-(b.w?wellTotal(b.w):99)));
+ const head=`<thead><tr><th>Jugador</th>${W.map(w=>`<th class="r">${w[1]}</th>`).join('')}<th class="r">Total</th><th>Dolor / comentario</th><th></th></tr></thead>`;
+ if(md1&&Object.keys(mins).length){const big=rows.filter(r=>(mins[r.p.id]||0)>=60),rest=rows.filter(r=>(mins[r.p.id]||0)<60);
+  out+=`<h3 class="g-h">Jugaron 60' o más <small class="g-sub">${big.length}</small></h3><div class="tablewrap"><table>${head}<tbody>${sorted(big).map(row).join('')}</tbody></table></div><h3 class="g-h">Jugaron menos o no jugaron <small class="g-sub">${rest.length}</small></h3><div class="tablewrap"><table>${head}<tbody>${sorted(rest).map(row).join('')}</tbody></table></div>`}
+ else out+=`<div class="tablewrap"><table>${head}<tbody>${sorted(rows).map(row).join('')}</tbody></table></div>`;
+ const pr=painRanking(d);
+ if(pr.length)out+=`<div class="panel"><h3>Zonas de dolor que más se repiten <small>últimos 14 días</small></h3><div class="body"><div class="mini">${pr.map(z=>`<div><span>${esc(z.k.charAt(0).toUpperCase()+z.k.slice(1))}</span><span>${z.n} ${plural(z.n,'vez','veces')} · ${z.ps} ${plural(z.ps,'jugador','jugadores')}</span></div>`).join('')}</div></div></div>`;
  {const sd=S.sessions.filter(x=>x.date===d);const cxd=sd.length&&sd.every(x=>x.cancel);
  out+=`<div class="bar"><div><h2 style="font-size:22px">Esfuerzo (RPE) del día</h2><p>Carga individual = RPE × minutos.${cxd?' <b>El entrenamiento de este día se suspendió</b>: los RPE de "Equipo" no corresponden a una sesión.':''}</p></div></div>`;}
  out+=rp.length?`<div class="tablewrap"><table><thead><tr><th>Jugador</th><th>Actividad</th><th class="r">RPE</th><th class="r">Min</th><th class="r">Carga</th><th>Comentario</th><th></th></tr></thead><tbody>${rp.sort((a,b)=>(b.rpe||0)-(a.rpe||0)).map(c=>`<tr><td>${esc(plName(c.player))}</td><td>${esc(c.activity||'')}</td><td class="r"><span class="wv ${+c.rpe>=8?'lo':''}">${esc(c.rpe)}</span></td><td class="r num">${esc(c.minutes??'')}</td><td class="r num">${isNum(c.minutes)?Math.round(c.rpe*c.minutes):''}</td><td style="white-space:normal;min-width:140px">${esc(c.note||'')}</td><td>${delBtn(c.id)}</td></tr>`).join('')}</tbody></table></div>`:`<div class="empty"><strong>Sin RPE ese día</strong><p>Después de entrenar, cada jugador carga su esfuerzo del 1 al 10 y los minutos desde su link.</p></div>`;
  return out;
+}
+function wellWeek(d){
+ const days=Array.from({length:wellSpan},(_,i)=>addDays(d,i-wellSpan+1));const ps=sortedPlayers();
+ const dayAvg=days.map(x=>{const L=ps.map(p=>wellOf(p.id,x)).filter(Boolean);return {n:L.length,avg:L.length?L.reduce((a,c)=>a+wellTotal(c),0)/L.length:null}});
+ const mx=20,mn=Math.min(...dayAvg.filter(x=>x.avg!=null).map(x=>x.avg),12);
+ return `<div class="g-ctl"><div class="fld"><label for="wellSpan">Días</label><select class="flt" id="wellSpan">${[7,14,28].map(n=>`<option value="${n}" ${wellSpan===n?'selected':''}>Últimos ${n} días</option>`).join('')}</select></div><button class="btn sm" type="button" data-act="wxls">Descargar Excel</button></div>
+ <div class="panel"><h3>Promedio del plantel por día <small>sobre 20</small></h3><div class="body"><div class="wbars">${days.map((x,i)=>{const a=dayAvg[i];const code=mdCode(x);return `<div class="wbar ${x===d?'cur':''}" title="${esc(fd(x)+(a.avg!=null?' · '+a.avg.toFixed(1):''))}"><span class="wv-n">${a.avg!=null?a.avg.toFixed(1):''}</span><span class="wb-c"><span class="wb-f ${wcl(a.avg)}" style="height:${a.avg!=null?Math.max(6,Math.round((a.avg-mn+1)/(mx-mn+1)*100)):0}%"></span></span><span class="wb-d">${DOW[parse(x).getDay()].slice(0,2)}<br>${fd(x).slice(0,5)}</span><span class="wb-md ${code==='MD'?'m':''}">${code||''}</span></div>`}).join('')}</div><p class="g-note" style="margin:8px 0 0">Si el promedio cae siempre después de los días más pesados del microciclo, conviene revisar la carga de esos días.</p></div></div>
+ <div class="tablewrap att-grid"><table><thead><tr><th class="ag-p">Jugador</th>${days.map(x=>`<th class="ag-d"><span>${DOW[parse(x).getDay()].slice(0,2)}</span><span class="num">${fd(x).slice(0,5)}</span>${mdCode(x)?`<span class="wb-md ${mdCode(x)==='MD'?'m':''}">${mdCode(x)}</span>`:''}</th>`).join('')}</tr></thead><tbody>${ps.map(p=>`<tr><td class="ag-p"><button class="linkbtn" type="button" data-act="player" data-id="${p.id}">${esc(p.name)}</button></td>${days.map(x=>{const w=wellOf(p.id,x);return `<td class="ag-c">${w?`<span class="wcell ${wcl(wellTotal(w))}" title="${esc(fd(x)+' · '+WELL.map(k=>k[1]+' '+w[k[0]]).join(' · '))}">${wellTotal(w)}</span>`:''}</td>`}).join('')}</tr>`).join('')}
+ <tr class="ag-avg"><td class="ag-p">Promedio</td>${dayAvg.map(a=>`<td class="ag-c num">${a.avg!=null?a.avg.toFixed(1):''}</td>`).join('')}</tr><tr class="ag-avg"><td class="ag-p">Respondieron</td>${dayAvg.map(a=>`<td class="ag-c num">${a.n||''}</td>`).join('')}</tr></tbody></table></div>
+ <div class="att-legend"><span><span class="wcell hi">16</span>15 a 20, bien</span><span><span class="wcell mid">13</span>12 a 14, atención</span><span><span class="wcell lo">10</span>11 o menos, alerta</span></div>`;
+}
+function wellLoad(d){
+ const rows=sortedPlayers().map(p=>({p,...acwr(p.id,d)})).sort((a,b)=>(b.r??-1)-(a.r??-1));const up=rows.filter(r=>r.r!=null&&r.r>1.5);
+ return `<p class="g-note">Suma de RPE × minutos que cargó cada jugador (entrenamientos, partido, gimnasio y lo que hizo por su cuenta) en los 7 días hasta el ${fdy(d)}, contra su promedio semanal de las 4 semanas anteriores (sin contar las semanas en que no cargó nada). Si la última semana es más de 1,5 veces su promedio, el riesgo de lesión sube: conviene bajarle la carga. Depende de que carguen el RPE siempre.</p>
+ ${up.length?`<div class="banner">${up.length} ${plural(up.length,'jugador subió','jugadores subieron')} la carga de golpe: ${up.map(r=>esc(r.p.name)).join(', ')}.</div>`:''}
+ <div class="tablewrap"><table><thead><tr><th>Jugador</th><th class="r">Última semana</th><th class="r">Promedio 4 semanas</th><th class="r">Relación</th><th>Estado</th></tr></thead><tbody>${rows.map(r=>{const st=acwrState(r.r);return `<tr class="click" data-act="player" data-id="${r.p.id}"><td><span class="num" style="color:var(--muted)">${isNum(r.p.number)?+r.p.number:''}</span> ${esc(r.p.name)}</td><td class="r num">${r.a?r.a.toLocaleString('es-AR'):'–'}</td><td class="r num">${r.ch?r.ch.toLocaleString('es-AR'):'–'}</td><td class="r num">${r.r!=null?r.r.toFixed(2).replace('.',','):'–'}</td><td><span class="pill ${st[0]}">${st[1]}</span>${r.r==null&&r.withData<3?' <span class="g-sub">(hace falta RPE de al menos 3 de las 4 semanas anteriores)</span>':''}</td></tr>`}).join('')}</tbody></table></div>`;
+}
+function wellGridPlayer(id){
+ const d=today();const days=Array.from({length:14},(_,i)=>addDays(d,i-13));const L=days.map(x=>wellOf(id,x));if(!L.some(Boolean))return '<div style="color:var(--muted)">Sin respuestas en los últimos 14 días.</div>';
+ return `<div class="tablewrap att-grid wgp"><table><thead><tr><th class="ag-p"></th>${days.map(x=>`<th class="ag-d"><span>${DOW[parse(x).getDay()].slice(0,1)}</span><span class="num">${parse(x).getDate()}</span></th>`).join('')}</tr></thead><tbody>${WELL.map(w=>`<tr><td class="ag-p">${w[1]}</td>${L.map(c=>`<td class="ag-c">${c?`<span class="wv ${+c[w[0]]<=2?'lo':+c[w[0]]>=4?'hi':''}">${c[w[0]]??''}</span>`:''}</td>`).join('')}</tr>`).join('')}<tr class="ag-avg"><td class="ag-p">Total</td>${L.map(c=>`<td class="ag-c">${c?`<span class="wcell ${wcl(wellTotal(c))}">${wellTotal(c)}</span>`:''}</td>`).join('')}</tr></tbody></table></div>`;
+}
+/* recordatorio a los que no respondieron */
+const waPhone=v=>{let x=String(v||'').replace(/\D/g,'');if(!x)return '';if(x.startsWith('00'))x=x.slice(2);if(x.startsWith('0'))x=x.slice(1);if(x.length===10)x='549'+x;return x};
+function openWellRemind(){
+ const d=wellDate||today();const no=sortedPlayers().filter(p=>!wellOf(p.id,d)&&availability(p.id)[0]!=='Lesionado');const hoy=d===today();
+ const grp=`Recordatorio: carguen en su link cómo llegaron ${hoy?'hoy':'el '+dayLong(d)} (sueño, cansancio, dolor y estrés). Tarda 30 segundos.\nFaltan: ${no.map(p=>p.name).join(', ')}.`;
+ const one=p=>`Hola ${String(p.name||'').trim().split(/\s+/)[0]}! Acordate de cargar cómo llegaste ${hoy?'hoy':'el '+dayLong(d)}. Tarda 30 segundos.${p.linkId?'\n'+playerUrl(p.linkId):''}`;
+ $('#mTitle').textContent='Recordatorio de bienestar';
+ $('#mBody').innerHTML=`<div class="form">${waBox(grp).replace('Mensaje para el grupo','Mensaje para el grupo del plantel').replace('<div class="formacts"><button type="button" class="btn" data-act="close">Listo</button>','<div class="formacts">')}
+ <div class="fld full"><span class="lb">De a uno${no.some(p=>waPhone(p.phone))?'':' (cargá el celular de cada jugador en Plantel para mandarle directo)'}</span><div class="list">${no.map(p=>`<div class="row r-std"><div class="main"><div class="t">${esc(p.name)}</div>${p.phone?'':'<div class="m"><span>Sin celular cargado</span></div>'}</div><div class="acts"><a class="btn sm ${waPhone(p.phone)?'primary':''}" href="https://wa.me/${waPhone(p.phone)}?text=${encodeURIComponent(one(p))}" target="_blank" rel="noopener">WhatsApp</a></div></div>`).join('')}</div></div>
+ <div class="formacts"><button type="button" class="btn" data-act="close">Listo</button></div></div>`;showModal();
+}
+/* Excel de bienestar y RPE */
+function wellXls(){
+ const d=wellDate||today();const from=addDays(d,-wellSpan+1);const q=v=>{const x=String(v??'');return /[;"\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x};
+ const L=S.checkins.filter(c=>(c.kind==='well'||c.kind==='rpe')&&c.date>=from&&c.date<=d&&pl(c.player)).sort((a,b)=>a.date.localeCompare(b.date)||plName(a.player).localeCompare(plName(b.player)));
+ const head=['Fecha','Día','Jugador','Tipo',...WELL.map(w=>w[1]),'Total bienestar','Zona de dolor','Actividad','RPE','Minutos','Carga','Comentario'];
+ const rows=L.map(c=>[fdy(c.date),mdCode(c.date),plName(c.player),c.kind==='well'?'Bienestar':'RPE',...WELL.map(w=>c.kind==='well'?c[w[0]]??'':''),c.kind==='well'?wellTotal(c):'',c.painZone||'',c.activity||'',c.kind==='rpe'?c.rpe:'',c.kind==='rpe'?c.minutes??'':'',c.kind==='rpe'&&isNum(c.minutes)?Math.round(c.rpe*c.minutes):'',c.note||'']);
+ const csv='﻿'+[head,...rows].map(r=>r.map(q).join(';')).join('\r\n');
+ try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=`bienestar-${from}-a-${d}.csv`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}catch(_){toast('No se pudo descargar el archivo.')}
 }
 function ensureShare(r){
  let sid=r.shareId;
@@ -1971,6 +2046,9 @@ document.addEventListener('click',e=>{
  else if(a==='attclear'){document.querySelectorAll('[data-row-att]').forEach(r=>{r.querySelector('[data-att]').value='';r.querySelectorAll('.ab').forEach(b=>b.classList.remove('on'));r.querySelector('.ar-x').innerHTML=''});attCount()}
  else if(a==='attv')attRowSet(b.closest('[data-row-att]'),b.dataset.v);
  else if(a==='attwa')openAttWa();
+ else if(a==='wday'){const v=+b.dataset.v;const d=wellDate||today();wellDate=v===0?today():addDays(d,v)>today()?today():addDays(d,v);render()}
+ else if(a==='wremind')openWellRemind();
+ else if(a==='wxls')wellXls();
  else if(a==='attxls')attXls();
  else if(a==='attpdf')attPdf();
  else if(a==='pconf'){const row=b.closest('.conf-it');if(b.dataset.v==='Voy')sendConf(row,true);else row.querySelector('.conf-why').hidden=false}
@@ -2043,6 +2121,8 @@ document.addEventListener('change',e=>{
  if(e.target.id==='gymFilter'){gymFilter=e.target.value;render()}
  if(e.target.matches&&e.target.matches('[data-reason]')){const r=e.target.closest('[data-row-att]');r.querySelector('[data-att]').value=e.target.value;attCount()}
  if(e.target.name==='attview'){attView=e.target.value;render()}
+ if(e.target.name==='wellview'){wellView=e.target.value;render()}
+ if(e.target.id==='wellSpan'){wellSpan=+e.target.value;render()}
  if(e.target.id==='attFrom'){attFrom=e.target.value;render()}
  if(e.target.id==='attTo'){attTo=e.target.value;render()}
  const g=e.target.closest('[data-group]');if(g)updCount(g.dataset.group);

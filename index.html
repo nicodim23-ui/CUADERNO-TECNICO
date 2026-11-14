@@ -310,6 +310,17 @@ tr.click:hover td{background:var(--sunk)}
 .ag-dot.ok{background:var(--ok-soft);color:var(--ok)}.ag-dot.amber{background:var(--amber-soft);color:var(--amber)}.ag-dot.acc{background:var(--accent-soft);color:var(--accent)}.ag-dot.warn{background:var(--warn);color:#fff}.ag-dot.mut{background:var(--sunk);color:var(--muted)}
 .att-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}.att-legend>span{display:flex;gap:5px;align-items:center}
 .conf-it{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:8px}.conf-btns{display:flex;gap:8px}.conf-btns .btn{flex:1}.conf-why{display:grid;gap:6px}.conf-why select,.conf-why input{border:1px solid var(--line);border-radius:8px;padding:9px;font:inherit;background:var(--bg)}
+
+.well-nav{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}.well-day{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.well-day .g-sub{text-transform:capitalize}
+.wfs{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}.pill.wf{font-size:11px}
+.wbars{display:flex;gap:4px;align-items:stretch;overflow-x:auto;padding-bottom:4px}.wbar{flex:1 0 30px;display:grid;grid-template-rows:auto 90px auto auto;gap:3px;text-align:center;font-size:11px}
+.wbar.cur .wb-d{color:var(--accent);font-weight:700}.wv-n{font-size:11px;font-weight:600;color:var(--muted)}
+.wb-c{display:flex;align-items:flex-end;background:var(--sunk);border-radius:6px;overflow:hidden}.wb-f{display:block;width:100%;border-radius:6px 6px 0 0;background:var(--muted)}
+.wb-f.hi,.wcell.hi{background:var(--ok)}.wb-f.mid,.wcell.mid{background:var(--amber)}.wb-f.lo,.wcell.lo{background:var(--warn)}
+.wb-d{color:var(--muted);line-height:1.2}.wb-md{display:block;font-size:10px;color:var(--accent);font-weight:600}.wb-md.m{color:var(--warn)}
+.wcell{display:inline-grid;place-items:center;min-width:24px;height:22px;border-radius:6px;font-size:11px;font-weight:700;color:#fff;padding:0 3px}
+tr.ag-avg td{background:var(--sunk);font-size:12px;font-weight:600}
+.wgp .ag-p{font-size:12px}.wgp .ag-d{min-width:22px}.wgp .wv{min-width:20px;padding:1px 4px;font-size:12px}
 .conf-line{color:var(--muted)}.conf-line b{color:var(--ink)}
 .att-row .n{font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--accent);text-align:center}
 .att-row label{font-size:15px;text-transform:none;letter-spacing:0;color:var(--ink);font-weight:500}
@@ -612,6 +623,6 @@ details.g-det h5{margin:0}
 <div id="big" hidden role="dialog" aria-label="Sesión en pantalla grande"></div>
 <div class="toast" id="toast" hidden></div>
 
-<script type="module" src="app.js?v=16"></script>
+<script type="module" src="app.js?v=17"></script>
 </body>
 </html>
