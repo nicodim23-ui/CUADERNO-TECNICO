@@ -41,13 +41,13 @@ service cloud.firestore {
     match /plinks/{token} {
       allow get: if true;
     }
-    // Bienestar y RPE que envía el jugador desde su link. Solo puede crear registros
+    // Bienestar, RPE y confirmación de asistencia que envía el jugador desde su link. Solo puede crear registros
     // a su nombre; leerlos, cambiarlos o borrarlos puede únicamente el cuerpo técnico.
     match /checkins/{id} {
       allow create: if request.resource.data.keys().hasOnly(['token', 'player', 'kind', 'at', 'date',
             'sleep', 'fatigue', 'soreness', 'stress', 'painZone', 'note', 'activity', 'rpe', 'minutes'])
         && request.resource.data.token is string
-        && request.resource.data.kind in ['well', 'rpe']
+        && request.resource.data.kind in ['well', 'rpe', 'conf']
         && request.resource.data.date is string && request.resource.data.date.size() == 10
         && request.resource.data.get('note', '').size() <= 400
         && request.resource.data.get('painZone', '').size() <= 80

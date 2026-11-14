@@ -10,7 +10,7 @@ const NEW_COLS=['mesos','micros','gymlogs','checkins','exercises']; // necesitan
 const S={};COLS.forEach(c=>S[c]=[]);S.exPlayers=[];
 const R={};COLS.forEach(c=>R[c]=[]);
 const SQUAD_COLS=['sessions','matches','mesos','micros'];
-let club={name:''}, access=null, members={}, me=null, tab='resumen', testFilter='', injFilter='activas', attRange='30', gymFilter='', unsubs=[], rulesOld=false;
+let club={name:''}, access=null, members={}, me=null, tab='resumen', testFilter='', injFilter='activas', attRange='30', attFrom='', attTo='', attView='tabla', gymFilter='', unsubs=[], rulesOld=false;
 const pubMatch=location.hash.match(/^#r-([A-Za-z0-9]{12,40})$/);
 const plMatch=location.hash.match(/^#j-([A-Za-z0-9]{12,40})$/);
 const publicMode=!!(pubMatch||plMatch);
@@ -46,6 +46,7 @@ let curSquad=(()=>{try{return localStorage.getItem('ct_squad')||''}catch(_){retu
 const sq=()=>{const l=squads();return l.some(x=>x.id===curSquad)?curSquad:l[0].id};
 const sqName=id=>{const x=squads().find(v=>v.id===(id||sq()));return x?x.name:''};
 const inSq=d=>squads().length<2||(d.squad||squads()[0].id)===sq();
+const LOADED=new Set();
 function derive(){
  const all=R.players.filter(inSq);S.players=all.filter(p=>!p.baja);S.exPlayers=all.filter(p=>p.baja);
  const ids=new Set(all.map(p=>p.id));
@@ -72,13 +73,14 @@ const memberName=id=>(members[id]&&members[id].name)||(me&&id===me.uid?(me.displ
 const randId=n=>{const a='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';const r=crypto.getRandomValues(new Uint8Array(n));return [...r].map(x=>a[x%a.length]).join('')};
 
 /* asistencia */
-const ATT=[['P','Presente','ok'],['T','Llegó tarde','amber'],['JE','Justificada · enfermedad','acc'],['JT','Justificada · trabajo','acc'],['JS','Justificada · estudio','acc'],['JO','Justificada · otra','acc'],['I','Injustificada','warn'],['L','Lesionado','']];
+const ATT=[['P','Presente','ok'],['T','Llegó tarde','amber'],['JE','Justificada · enfermedad','acc'],['JT','Justificada · trabajo','acc'],['JS','Justificada · estudio','acc'],['JP','Justificada · permiso del CT','acc'],['JV','Justificada · viaje','acc'],['JN','Justificada · selección','acc'],['JO','Justificada · otra','acc'],['I','Injustificada','warn'],['L','Lesionado','']];
+const isAbs=v=>!!v&&v!=='P'&&v!=='T'&&v!=='L';
 const ATT_LABEL=Object.fromEntries(ATT.map(a=>[a[0],a[1]]));
 const attMap=s=>{if(s.att&&typeof s.att==='object')return s.att;if(Array.isArray(s.attendance)){const m={};s.attendance.forEach(id=>m[id]='P');return m}return null};
 const hasAtt=s=>{const m=attMap(s);return !!(m&&Object.keys(m).length)};
 function attStats(pid,sessions){
- const c={P:0,T:0,JE:0,JT:0,JS:0,JO:0,I:0,L:0,n:0};
- sessions.forEach(s=>{if(s.cancel)return;const m=attMap(s);if(!m||!m[pid])return;c[m[pid]]=(c[m[pid]]||0)+1;c.n++});
+ const c={P:0,T:0,JE:0,JT:0,JS:0,JP:0,JV:0,JN:0,JO:0,I:0,L:0,n:0,J:0,late:0};
+ sessions.forEach(s=>{if(s.cancel)return;const m=attMap(s);if(!m||!m[pid])return;c[m[pid]]=(c[m[pid]]||0)+1;c.n++;if(m[pid][0]==='J')c.J++;if(m[pid]==='T'&&s.late&&isNum(s.late[pid]))c.late+= +s.late[pid]});
  const base=c.n-c.L;c.pct=base>0?Math.round((c.P+c.T)/base*100):null;return c;
 }
 function sessGroupPct(s){if(s.cancel)return null;const m=attMap(s);if(!m)return null;const v=Object.values(m);const base=v.filter(x=>x!=='L').length;if(!base)return null;return v.filter(x=>x==='P'||x==='T').length/base}
@@ -194,7 +196,7 @@ function startData(){
  const nm=me.displayName||me.email.split('@')[0];
  setDoc(doc(db,'members',me.uid),{name:nm,email:me.email.toLowerCase(),seen:new Date().toISOString()}).catch(()=>{});
  rulesOld=false;
- COLS.forEach(col=>unsubs.push(onSnapshot(collection(db,col),s=>{R[col]=s.docs.map(d=>({...d.data(),id:d.id}));derive();render()},err=>{if(err&&err.code==='permission-denied'&&NEW_COLS.includes(col)){rulesOld=true;render()}})));
+ COLS.forEach(col=>unsubs.push(onSnapshot(collection(db,col),s=>{R[col]=s.docs.map(d=>({...d.data(),id:d.id}));LOADED.add(col);derive();render();autoPlinks()},err=>{if(err&&err.code==='permission-denied'&&NEW_COLS.includes(col)){rulesOld=true;render()}})));
  unsubs.push(onSnapshot(collection(db,'members'),s=>{members={};s.docs.forEach(d=>members[d.id]=d.data());render()},()=>{}));
  unsubs.push(onSnapshot(doc(db,'config','club'),s=>{club=s.exists()?s.data():{name:''};derive();render()},()=>{}));
 }
@@ -399,6 +401,11 @@ function pendings(NUM){
    if(miss.length)out.push({txt:`${miss.length} ${plural(miss.length,'jugador no cargó','jugadores no cargaron')} el RPE de la sesión del ${sd(lastS)}`,names:miss.map(plName),act:'tab',k:'well',btn:'Ir a Bienestar'});
   }else if(!isNum(lastS.rpe))out.push({txt:`Falta el RPE de la sesión del ${sd(lastS)}`,act:'att',id:lastS.id,btn:'Cargar RPE'});
  }
+ {const AS=sessOrder().filter(s=>!s.cancel&&hasAtt(s)).reverse();const mo=t.slice(0,7);const strk=[],lates=[];
+  sortedPlayers().forEach(p=>{let n=0;for(const s of AS){const v=attMap(s)[p.id];if(!v)continue;if(isAbs(v))n++;else break}if(n>=2)strk.push(`${p.name} (${n} seguidas)`);
+   const lt=AS.filter(s=>s.date.slice(0,7)===mo&&attMap(s)[p.id]==='T').length;if(lt>=3)lates.push(`${p.name} (${lt})`)});
+  if(strk.length)out.push({txt:`${strk.length} ${plural(strk.length,'jugador faltó','jugadores faltaron')} a 2 o más sesiones seguidas`,names:strk,act:'tab',k:'att',btn:'Ir a Asistencia'});
+  if(lates.length)out.push({txt:`${lates.length} ${plural(lates.length,'jugador llegó','jugadores llegaron')} tarde 3 veces o más este mes`,names:lates,act:'tab',k:'att',btn:'Ir a Asistencia'});}
  const apt=sortedPlayers().filter(p=>p.apto&&daysBetween(t,p.apto)<=15);
  if(apt.length)out.push({txt:`${apt.length} ${plural(apt.length,'apto médico vencido o por vencer','aptos médicos vencidos o por vencer')}`,names:apt.map(p=>`${p.name} (${daysBetween(t,p.apto)<0?'venció':'vence'} ${fd(p.apto)})`),act:'tab',k:'players',btn:'Ir a Plantel'});
  const noIft=sortedPlayers().filter(p=>!isGK(p)&&!lastTest(p.id,['30-15 IFT','30-15']));
@@ -638,7 +645,7 @@ function openPlayer(id){
  <div class="det-sec"><h4>Datos</h4><div class="mini">${facts.map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span>${esc(f[1])}</span></div>`).join('')}</div></div>
  <div class="det-sec"><h4>Contacto y salud</h4>${health.length?`<div class="mini">${health.map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span>${f[1]}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin datos cargados.</div>'}</div>
  ${p.notes?`<div class="det-sec"><h4>Observaciones</h4><div style="white-space:pre-wrap">${esc(p.notes)}</div></div>`:''}
- <div class="det-sec"><h4>Asistencia últimos 30 días</h4>${as.n?`<div class="att-sum">${ATT.filter(x=>as[x[0]]).map(x=>`<span class="pill ${x[2]}">${x[1]}: ${as[x[0]]}</span>`).join('')}</div>`:'<div style="color:var(--muted)">Sin registros de asistencia.</div>'}</div>
+ <div class="det-sec"><h4>Asistencia</h4>${playerAttHTML(id,as)}</div>
  <div class="det-sec"><h4>Bienestar y RPE (lo carga el jugador)</h4>${(()=>{const L=S.checkins.filter(c=>c.player===id).sort(byDateDesc).slice(0,6);return L.length?`<div class="mini">${L.map(c=>c.kind==='well'?`<div><span>${fdy(c.date)} · Bienestar${c.painZone?' · dolor: '+esc(c.painZone):''}</span><span>${WELL.map(w=>`${w[1]} <b class="num">${c[w[0]]??'–'}</b>`).join(' · ')} · <b class="num">${wellTotal(c)} de 20</b></span></div>`:`<div><span>${fdy(c.date)} · ${esc(c.activity||'')}</span><span>RPE <b class="num">${esc(c.rpe)}</b>${isNum(c.minutes)?` · ${c.minutes} min · carga <b class="num">${Math.round(c.rpe*c.minutes)}</b>`:''}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Todavía no cargó nada. Mandale su link.</div>'})()}</div>
  <div class="det-sec"><h4>Gimnasio</h4>${gr.length?`<div style="margin-bottom:8px;font-size:14px">Rutinas asignadas: ${gr.map(r=>`<button class="linkbtn" type="button" data-act="rsheet" data-id="${r.id}">${esc(r.name)}</button>`).join(' · ')}</div>`:''}${gl.length?`<div class="mini">${gl.map(g=>{const r=S.routines.find(x=>x.id===g.routine);return `<div><span>${fdy(g.date)} · ${esc(r?r.name:(g.done||'Gimnasio').split('\n')[0])}</span><span class="num" style="color:var(--muted)">${[isNum(g.duration)?g.duration+' min':'',isNum(g.rpe)?'RPE '+g.rpe:''].filter(Boolean).join(' · ')}</span></div>`}).join('')}</div>`:'<div style="color:var(--muted)">Sin registros de gimnasio.</div>'}</div>
  <div class="det-sec"><h4>Tests · último resultado</h4>${TT.length?`<div class="mini">${TT.map(x=>`<div><span>${esc(x.a.test)} · <span class="num" style="color:var(--muted)">${fdy(x.a.date)}</span></span><span><b class="num">${esc(String(x.a.value).replace('.',','))} ${esc(x.a.unit||'')}</b> ${x.tr}</span></div>`).join('')}</div>${tests.length>TT.length?`<details class="miss"><summary>Ver todas las mediciones (${tests.length})</summary><div class="mini" style="margin-top:6px">${tests.map(t=>`<div><span>${esc(t.test)} · <span class="num" style="color:var(--muted)">${fdy(t.date)}</span></span><span class="num">${esc(t.value)} ${esc(t.unit||'')}</span></div>`).join('')}</div></details>`:''}`:'<div style="color:var(--muted)">Sin mediciones.</div>'}</div>
@@ -1392,48 +1399,117 @@ function libPickOpts(pat){const all=libAll().filter(e=>e.pattern===pat);return l
 
 /* ---------- asistencia ---------- */
 
-function inAttRange(s){const t=today();{if(attRange==='30')return inLastDays(s.date,30);if(attRange==='mes')return s.date&&s.date.slice(0,7)===t.slice(0,7);if(attRange==='micro'){const m=microOf(t);return m?inRange(s.date,m):false}return true}}
+function inAttRange(s){const t=today();if(!s.date)return false;
+ if(attRange==='30')return inLastDays(s.date,30);if(attRange==='mes')return s.date.slice(0,7)===t.slice(0,7);
+ if(attRange==='micro'){const m=microOf(t);return m?inRange(s.date,m):false}if(attRange==='meso'){const m=mesoOf(t);return m?inRange(s.date,m):false}
+ if(attRange==='custom')return (!attFrom||s.date>=attFrom)&&(!attTo||s.date<=attTo);return true}
 const attSessions=()=>S.sessions.filter(s=>!s.cancel&&hasAtt(s)&&inAttRange(s));
+const ATT_RANGES=[['30','Últimos 30 días'],['mes','Este mes'],['micro','Microciclo actual'],['meso','Mesociclo actual'],['todo','Toda la temporada'],['custom','Elegir fechas']];
+const attRangeName=()=>attRange==='custom'?`del ${attFrom?fdy(attFrom):'inicio'} al ${attTo?fdy(attTo):'hoy'}`:(ATT_RANGES.find(x=>x[0]===attRange)||ATT_RANGES[0])[1].toLowerCase();
 function cxLine(){const L=S.sessions.filter(s=>s.cancel&&inAttRange(s));if(!L.length)return '';const g={};L.forEach(s=>{g[s.cancel]=(g[s.cancel]||0)+1});
  return `<p class="cx-line">Sesiones suspendidas en el período: <b>${L.length}</b> (${CX.filter(c=>g[c[0]]).map(c=>g[c[0]]+' '+c[3]).join(', ')}). <button class="linkbtn" type="button" data-act="tab" data-k="sessions">Ver</button></p>`}
+const ATT_CL={P:'ok',T:'amber',I:'warn',L:'mut'};const attCl=v=>v?(ATT_CL[v]||'acc'):'';
+const ATT_SH={P:'P',T:'T',I:'I',L:'L',JE:'E',JT:'Tr',JS:'Es',JP:'Pe',JV:'V',JN:'Se',JO:'O'};
+function attRows(ss){return sortedPlayers().map(p=>({p,c:attStats(p.id,ss)})).filter(r=>r.c.n).sort((a,b)=>(a.c.pct??101)-(b.c.pct??101))}
 function vAtt(){
- const opt=(v,l)=>`<option value="${v}" ${attRange===v?'selected':''}>${l}</option>`;
- const h=`<div class="bar"><div><h2>Asistencia</h2><p>Se carga desde cada sesión con el botón Asistencia. El % no cuenta los días de lesión.</p></div><div class="tools"><select class="flt" id="attRange" aria-label="Período">${opt('30','Últimos 30 días')}${opt('mes','Este mes')}${opt('micro','Microciclo actual')}${opt('todo','Toda la temporada')}</select></div></div>`;
- if(!S.players.length)return h+empty('Sin jugadores','Cargá el plantel para empezar a tomar asistencia.','players','Agregar jugador');
+ const opt=ATT_RANGES.map(([v,l])=>`<option value="${v}" ${attRange===v?'selected':''}>${l}</option>`).join('');
  const ss=attSessions();
- if(!ss.length)return h+cxLine()+`<div class="empty"><strong>Sin asistencias en este período</strong><p>Abrí una sesión y tocá <b>Asistencia</b> para marcar presentes, tardes, justificadas e injustificadas.</p></div>`;
- const rows=sortedPlayers().map(p=>({p,c:attStats(p.id,ss)})).sort((a,b)=>(a.c.pct??101)-(b.c.pct??101));
+ const h=`<div class="bar"><div><h2>Asistencia</h2><p>Se toma desde cada sesión con el botón Asistencia. El % no cuenta los días de lesión ni las sesiones suspendidas.</p></div><div class="tools"><select class="flt" id="attRange" aria-label="Período">${opt}</select>${ss.length?`<button class="btn" type="button" data-act="attwa">Resumen por WhatsApp</button><button class="btn" type="button" data-act="attxls">Excel</button><button class="btn" type="button" data-act="attpdf">PDF</button>`:''}</div></div>
+ ${attRange==='custom'?`<div class="g-ctl"><div class="fld"><label for="attFrom">Desde</label><input id="attFrom" type="date" value="${esc(attFrom)}"></div><div class="fld"><label for="attTo">Hasta</label><input id="attTo" type="date" value="${esc(attTo)}"></div></div>`:''}`;
+ if(!S.players.length)return h+empty('Sin jugadores','Cargá el plantel para empezar a tomar asistencia.','players','Agregar jugador');
+ if(!ss.length)return h+cxLine()+`<div class="empty"><strong>Sin asistencias en este período</strong><p>Abrí una sesión y tocá <b>Asistencia</b> para marcar presentes, tardes y ausencias con su motivo.</p></div>`;
+ const rows=attRows(ss);const grp=Math.round(ss.map(sessGroupPct).filter(x=>x!=null).reduce((a,b,_,A)=>a+b/A.length,0)*100);
  const cell=v=>v?`<td class="r num">${v}</td>`:`<td class="r num" style="color:var(--muted)">–</td>`;
- return h+`<div class="att-sum">${ATT.map(a=>`<span class="pill ${a[2]}">${a[1]}</span>`).join('')}</div>
- <div class="tablewrap"><table><thead><tr><th>Jugador</th><th class="r">Ses.</th><th class="r">Pres.</th><th class="r">Tarde</th><th class="r">Enf.</th><th class="r">Trab.</th><th class="r">Est.</th><th class="r">Otra</th><th class="r">Injust.</th><th class="r">Lesión</th><th class="r">%</th></tr></thead><tbody>
- ${rows.map(({p,c})=>`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td>${cell(c.n)}${cell(c.P)}${cell(c.T)}${cell(c.JE)}${cell(c.JT)}${cell(c.JS)}${cell(c.JO)}${c.I?`<td class="r num" style="color:var(--warn);font-weight:600">${c.I}</td>`:cell(0)}${cell(c.L)}<td class="r"><span class="pill ${c.pct==null?'':c.pct>=85?'ok':c.pct>=70?'amber':'warn'}">${c.pct==null?'–':c.pct+'%'}</span></td></tr>`).join('')}
- </tbody></table></div><p style="margin:0;font-size:13px;color:var(--muted)">${ss.length} sesión${ss.length>1?'es':''} con asistencia en el período. Las sesiones suspendidas no cuentan. Tocá un jugador para ver su ficha.</p>`+cxLine();
+ const view=`<div class="seg2 att-view"><label><input type="radio" name="attview" value="tabla" ${attView==='tabla'?'checked':''}><span>Tabla</span></label><label><input type="radio" name="attview" value="grilla" ${attView==='grilla'?'checked':''}><span>Grilla por sesión</span></label></div>`;
+ let body;
+ if(attView==='grilla'){const L=[...ss].sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+  body=`<div class="tablewrap att-grid"><table><thead><tr><th class="ag-p">Jugador</th>${L.map(s=>`<th class="ag-d" title="${esc(s.type||'')}"><span>${DOW[parse(s.date).getDay()].slice(0,2)}</span><span class="num">${fd(s.date)}</span></th>`).join('')}<th class="r">%</th></tr></thead><tbody>${sortedPlayers().filter(p=>L.some(s=>attMap(s)[p.id])).map(p=>{const c=attStats(p.id,L);return `<tr><td class="ag-p"><button class="linkbtn" type="button" data-act="player" data-id="${p.id}">${esc(p.name)}</button></td>${L.map(s=>{const v=attMap(s)[p.id];return `<td class="ag-c">${v?`<span class="ag-dot ${attCl(v)}" title="${esc(fd(s.date)+' · '+(ATT_LABEL[v]||''))}">${ATT_SH[v]||''}</span>`:''}</td>`}).join('')}<td class="r"><span class="pill ${c.pct==null?'':c.pct>=85?'ok':c.pct>=70?'amber':'warn'}">${c.pct==null?'–':c.pct+'%'}</span></td></tr>`}).join('')}</tbody></table></div>
+  <div class="att-legend">${[['P','Presente'],['T','Tarde'],['E','Enfermedad'],['Tr','Trabajo'],['Es','Estudio'],['Pe','Permiso del CT'],['V','Viaje'],['Se','Selección'],['O','Otra justificada'],['I','Injustificada'],['L','Lesionado']].map(x=>`<span><span class="ag-dot ${attCl(Object.keys(ATT_SH).find(k=>ATT_SH[k]===x[0]))}">${x[0]}</span>${x[1]}</span>`).join('')}</div>`}
+ else body=`<div class="tablewrap"><table><thead><tr><th>Jugador</th><th class="r">Ses.</th><th class="r">Pres.</th><th class="r">Tarde</th><th class="r">Justif.</th><th class="r">Injust.</th><th class="r">Lesión</th><th class="r">%</th></tr></thead><tbody>
+ ${rows.map(({p,c})=>{const jt=ATT.filter(a=>a[0][0]==='J'&&c[a[0]]).map(a=>a[1].replace('Justificada · ','')+': '+c[a[0]]).join(', ');return `<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td>${cell(c.n)}${cell(c.P)}${c.T?`<td class="r num">${c.T}${c.late?` <span class="g-sub">(${c.late}')</span>`:''}</td>`:cell(0)}${c.J?`<td class="r num" title="${esc(jt)}">${c.J}<div class="g-sub" style="white-space:normal;font-size:11px">${esc(jt)}</div></td>`:cell(0)}${c.I?`<td class="r num" style="color:var(--warn);font-weight:600">${c.I}</td>`:cell(0)}${cell(c.L)}<td class="r"><span class="pill ${c.pct==null?'':c.pct>=85?'ok':c.pct>=70?'amber':'warn'}">${c.pct==null?'–':c.pct+'%'}</span></td></tr>`}).join('')}
+ </tbody></table></div>`;
+ return h+`<div class="stats"><div class="stat"><div class="k">Asistencia del grupo</div><div class="v">${grp} %</div><div class="s">${attRangeName()}</div></div><div class="stat"><div class="k">Sesiones</div><div class="v">${ss.length}</div><div class="s">con asistencia tomada</div></div><div class="stat"><div class="k">Injustificadas</div><div class="v ${rows.some(r=>r.c.I)?'warn':''}">${rows.reduce((a,r)=>a+r.c.I,0)}</div><div class="s">en el período</div></div><div class="stat"><div class="k">Llegadas tarde</div><div class="v">${rows.reduce((a,r)=>a+r.c.T,0)}</div><div class="s">${rows.reduce((a,r)=>a+r.c.late,0)?rows.reduce((a,r)=>a+r.c.late,0)+' min en total':'en el período'}</div></div></div>`
+ +view+body+`<p style="margin:0;font-size:13px;color:var(--muted)">Tocá un jugador para ver su ficha.</p>`+cxLine();
 }
+function attSummaryText(){
+ const ss=attSessions();const rows=attRows(ss);const grp=Math.round(ss.map(sessGroupPct).filter(x=>x!=null).reduce((a,b,_,A)=>a+b/A.length,0)*100);
+ const abs=rows.filter(r=>r.c.J||r.c.I).sort((a,b)=>(b.c.J+b.c.I)-(a.c.J+a.c.I));const lt=rows.filter(r=>r.c.T).sort((a,b)=>b.c.T-a.c.T);
+ const why=c=>[...ATT.filter(a=>a[0][0]==='J'&&c[a[0]]).map(a=>c[a[0]]+' '+a[1].replace('Justificada · ','')),c.I?c.I+' sin justificar':''].filter(Boolean).join(', ');
+ return [`Asistencia · ${attRangeName()}${squads().length>1?' · '+sqName():''}`,`${ss.length} sesiones · ${grp} % del grupo`,abs.length?'\nFaltaron:\n'+abs.map(r=>`- ${r.p.name}: ${r.c.J+r.c.I} (${why(r.c)})`).join('\n'):'\nNo faltó nadie.',lt.length?'\nLlegaron tarde:\n'+lt.map(r=>`- ${r.p.name}: ${r.c.T}${r.c.late?' ('+r.c.late+' min)':''}`).join('\n'):'',(()=>{const low=rows.filter(r=>r.c.pct!=null&&r.c.pct<70);return low.length?'\nPor debajo del 70 %: '+low.map(r=>`${r.p.name} (${r.c.pct} %)`).join(', '):''})()].filter(Boolean).join('\n');
+}
+function openAttWa(){const txt=attSummaryText();$('#mTitle').textContent='Resumen de asistencia';$('#mBody').innerHTML=`<div class="form">${waBox(txt)}</div>`;showModal()}
+function attTableData(){const ss=attSessions();const rows=attRows(ss);
+ const cols=[['N°',r=>isNum(r.p.number)?+r.p.number:''],['Jugador',r=>r.p.name],['Sesiones',r=>r.c.n],['Presentes',r=>r.c.P],['Tarde',r=>r.c.T],['Minutos tarde',r=>r.c.late||''],...ATT.filter(a=>a[0][0]==='J').map(a=>[a[1].replace('Justificada · ','Just. '),r=>r.c[a[0]]||'']),['Injustificadas',r=>r.c.I],['Lesionado',r=>r.c.L],['%',r=>r.c.pct??'']];
+ return {ss,rows,cols}}
+function attXls(){const {rows,cols}=attTableData();const q=v=>{const x=String(v??'');return /[;"\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x};
+ const csv='﻿'+[cols.map(c=>q(c[0])).join(';'),...rows.map(r=>cols.map(c=>q(c[1](r))).join(';'))].join('\r\n');
+ try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=`asistencia-${today()}.csv`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}catch(_){toast('No se pudo descargar el archivo.')}}
+function attPdf(){const {ss,rows,cols}=attTableData();const keep=cols.filter((c,i)=>i<2||rows.some(r=>c[1](r)!==''&&c[1](r)!==0));
+ openDoc(`${sheetHead('Asistencia · '+esc(attRangeName())+(squads().length>1?' · '+esc(sqName()):''))}<p style="margin:0;font-size:13px;color:var(--muted)">${ss.length} sesiones con asistencia. El % no cuenta los días de lesión ni las sesiones suspendidas.</p><div class="tablewrap sh-table"><table><thead><tr>${keep.map(c=>`<th>${esc(c[0])}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${keep.map(c=>`<td>${esc(c[1](r))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`,`<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools"><button class="btn" type="button" data-act="attxls">Excel</button><button class="btn primary" type="button" data-act="print">Descargar PDF</button></div></div>`)}
+/* ficha del jugador */
+function playerAttHTML(id,as){
+ const AS=sessOrder().filter(s=>!s.cancel&&hasAtt(s)&&attMap(s)[id]).reverse();if(!AS.length)return '<div style="color:var(--muted)">Sin registros de asistencia.</div>';
+ const first=attMap(AS[0])[id];let n=0;const pres=x=>x==='P'||x==='T';for(const s of AS){const v=attMap(s)[id];if(v==='L')continue;if(pres(v)===pres(first)||first==='L')n++;else break}
+ const streak=first==='L'?'':pres(first)?`Viene a las últimas ${n} sesiones`:`Faltó a las últimas ${n} sesiones`;
+ const abs=AS.filter(s=>isAbs(attMap(s)[id])).slice(0,5);const mo=today().slice(0,7);const lt=AS.filter(s=>s.date.slice(0,7)===mo&&attMap(s)[id]==='T');const ltm=lt.reduce((a,s)=>a+(s.late&&isNum(s.late[id])?+s.late[id]:0),0);
+ return `<div class="mini">${[['Últimos 30 días',as.pct!=null?as.pct+' % ('+as.n+' sesiones)':'—'],['Racha',streak],['Tarde este mes',lt.length?lt.length+(ltm?` (${ltm} min)`:''):'']].filter(x=>x[1]).map(f=>`<div><span style="color:var(--muted)">${f[0]}</span><span>${esc(f[1])}</span></div>`).join('')}</div>
+ ${abs.length?`<div style="margin-top:8px;font-size:14px"><span style="color:var(--muted)">Últimas ausencias:</span> ${abs.map(s=>`${DOW[parse(s.date).getDay()]} ${fd(s.date)} (${esc((ATT_LABEL[attMap(s)[id]]||'').replace('Justificada · ','').toLowerCase())})`).join(' · ')}</div>`:''}`;
+}
+/* confirmaciones de los jugadores */
+const CONF_WHY=[['Enfermedad','JE'],['Trabajo','JT'],['Estudio','JS'],['Viaje','JV'],['Otro','JO']];
+const confOf=(pid,date)=>S.checkins.filter(c=>c.kind==='conf'&&c.player===pid&&c.date===date).sort((a,b)=>(b.at||'').localeCompare(a.at||''))[0];
+const confNo=c=>!!c&&/^No voy/.test(c.activity||'');
+const confWhy=c=>{const m=String(c&&c.activity||'').split(' · ')[1]||'';return m};
+function confCounts(s){const scope=sGroup(s)?S.players.filter(p=>sGroup(s).includes(p.id)):S.players;let y=0,n=0,q=0;scope.forEach(p=>{const c=confOf(p.id,s.date);if(!c)q++;else if(confNo(c))n++;else y++});return {y,n,q,tot:scope.length}}
+function confLine(s){const c=confCounts(s);if(!c.y&&!c.n)return '';return `<span class="conf-line">Confirmaron <b>${c.y}</b> · No vienen <b>${c.n}</b> · Sin responder ${c.q}</span>`}
+/* toma de asistencia rápida */
+function attDefault(p,s){const a=availability(p.id)[0];if(a==='Lesionado'||a==='Readaptación')return 'L';if(a==='Con permiso')return 'JP';if(a==='Enfermo')return 'JE';const c=confOf(p.id,s.date);if(confNo(c)){const w=CONF_WHY.find(x=>x[0]===confWhy(c));return w?w[1]:'JO'}return ''}
+const attGrp=v=>!v?'':v==='P'||v==='T'||v==='L'?v:'A';
+function attExtra(v,late,c){
+ if(attGrp(v)==='A')return `<select data-reason aria-label="Motivo">${ATT.filter(a=>a[0][0]==='J'||a[0]==='I').map(a=>`<option value="${a[0]}" ${a[0]===v?'selected':''}>${a[1]}</option>`).join('')}</select>`;
+ if(v==='T')return `<input data-late type="number" inputmode="numeric" min="1" max="180" value="${esc(late??'')}" placeholder="Minutos tarde (opcional)">`;
+ return '';
+}
+function attRowHTML(p,s,v,late){const c=confOf(p.id,s.date);const av=availability(p.id);
+ const tags=`${av[0]!=='Disponible'?` <span class="pill ${av[1]}">${av[0]}</span>`:''}${c?(confNo(c)?` <span class="pill acc">Avisó que no viene${confWhy(c)?' · '+esc(confWhy(c).toLowerCase()):''}</span>`:` <span class="pill ok">Confirmó</span>`):''}`;
+ return `<div class="att-row2" data-row-att="${p.id}"><div class="ar-nm"><span class="n">${isNum(p.number)?+p.number:''}</span><span class="nm">${esc(p.name)}${tags}${c&&c.note?`<span class="g-sub" style="display:block">${esc(c.note)}</span>`:''}</span></div>
+ <div class="ar-btns">${[['P','Presente'],['T','Tarde'],['A','Ausente'],['L','Lesión']].map(b=>`<button type="button" class="ab ab-${b[0]} ${attGrp(v)===b[0]?'on':''}" data-act="attv" data-v="${b[0]}">${b[1]}</button>`).join('')}</div>
+ <div class="ar-x">${attExtra(v,late,c)}</div><input type="hidden" data-att="${p.id}" value="${esc(v)}"></div>`}
+function attRowSet(row,g){const pid=row.dataset.rowAtt;const s=S.sessions.find(x=>x.id===(editing&&editing.id));const h=row.querySelector('[data-att]');const cur=h.value;
+ let v=g;if(g==='A'){v=attGrp(cur)==='A'?cur:(()=>{const d=s?attDefault(pl(pid)||{id:pid},s):'';return attGrp(d)==='A'?d:'I'})()}
+ h.value=v;row.querySelectorAll('.ab').forEach(b=>b.classList.toggle('on',b.dataset.v===attGrp(v)));row.querySelector('.ar-x').innerHTML=attExtra(v,(row.querySelector('[data-late]')||{}).value,null);attCount()}
 function openAtt(sid){
  const s=S.sessions.find(x=>x.id===sid);if(!s)return;
  if(s.cancel){toast('La sesión está suspendida. Reactivala para tomar asistencia.');return}
  if(!S.players.length){toast('Primero cargá el plantel.');return}
- const m=attMap(s)||{};const NUM=sessNums();
+ const m=attMap(s)||{};const NUM=sessNums();const had=hasAtt(s);const late=s.late||{};
  editing={key:'att',col:'sessions',id:sid};
  $('#mTitle').textContent='Asistencia · Sesión N° '+NUM[sid];
- $('#mBody').innerHTML=`<form class="form" id="attFrm" novalidate><div class="fld full" style="gap:8px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><span style="font-size:14px">${esc(s.type||'Sesión')} · ${DOW[parse(s.date).getDay()]} ${fdy(s.date)}</span><span class="tools" style="gap:4px"><button type="button" class="btn sm" data-act="attall">Todos presentes</button><button type="button" class="btn ghost sm" data-act="attclear">Limpiar</button></span></div>
- ${sGroup(s)?`<p class="hint" style="margin:0">Sesión para un grupo: ${sGroup(s).length} jugadores.</p>`:''}<div class="att-list">${sortedPlayers().filter(p=>!sGroup(s)||sGroup(s).includes(p.id)||m[p.id]).map(p=>{let v=m[p.id]||'';if(!v&&!hasAtt(s)&&availability(p.id)[0]!=='Disponible')v='L';
-  return `<div class="att-row"><span class="n">${isNum(p.number)?+p.number:''}</span><label for="att_${p.id}" style="min-width:0">${esc(p.name)}${availability(p.id)[0]!=='Disponible'?` <span class="pill ${availability(p.id)[1]}" style="font-size:11px">${availability(p.id)[0]}</span>`:''}</label><select id="att_${p.id}" data-att="${p.id}" class="s-${v}"><option value="">Sin cargar</option>${ATT.map(a=>`<option value="${a[0]}" ${a[0]===v?'selected':''}>${a[1]}</option>`).join('')}</select></div>`}).join('')}</div>
+ $('#mBody').innerHTML=`<form class="form" id="attFrm" novalidate><div class="fld full" style="gap:8px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><span style="font-size:14px">${esc(s.type||'Sesión')} · ${DOW[parse(s.date).getDay()]} ${fdy(s.date)}${confLine(s)?' · '+confLine(s):''}</span><span class="tools" style="gap:4px"><button type="button" class="btn sm" data-act="attall">Todos presentes</button><button type="button" class="btn ghost sm" data-act="attclear">Limpiar</button></span></div>
+ ${sGroup(s)?`<p class="hint" style="margin:0">Sesión para un grupo: ${sGroup(s).length} jugadores.</p>`:''}<div class="att-list">${sortedPlayers().filter(p=>!sGroup(s)||sGroup(s).includes(p.id)||m[p.id]).map(p=>attRowHTML(p,s,m[p.id]||(had?'':attDefault(p,s)),late[p.id])).join('')}</div>
  <div id="attCount" style="font-size:13px;color:var(--muted)"></div></div>
  <div class="fld"><label for="att_rpe">RPE promedio del grupo (1–10)</label><input id="att_rpe" type="number" inputmode="decimal" min="1" max="10" step="0.5" value="${esc(s.rpe??'')}"><span class="hint">Carga = RPE × ${sessDuration(s)||'minutos'} min.${(()=>{const pr=rpesOf(s.date).filter(c=>c.activity==='Equipo'&&isNum(c.rpe));if(!pr.length)return'';const av=Math.round(pr.reduce((a,c)=>a+ +c.rpe,0)/pr.length*2)/2;return ` Promedio que cargaron los jugadores: <b>${av}</b> (${pr.length} respuesta${pr.length>1?'s':''}). <button type="button" class="linkbtn" data-act="userpe" data-v="${av}">Usar</button>`})()}</span></div>
  <div class="fld full"><label for="att_notes">Observaciones de la sesión</label><textarea id="att_notes">${esc(s.notes||'')}</textarea></div>
  <div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">Guardar asistencia</button></div></form>`;
  showModal();attCount();
 }
-function attCount(){const sel=[...document.querySelectorAll('[data-att]')];const c={};sel.forEach(x=>{c[x.value]=(c[x.value]||0)+1});const el=$('#attCount');if(el)el.textContent=`Presentes ${(c.P||0)+(c.T||0)} · Justificadas ${(c.JE||0)+(c.JT||0)+(c.JS||0)+(c.JO||0)} · Injustificadas ${c.I||0} · Lesionados ${c.L||0} · Sin cargar ${c['']||0}`}
+function attCount(){const sel=[...document.querySelectorAll('[data-att]')];const c={};sel.forEach(x=>{const g=attGrp(x.value);c[g]=(c[g]||0)+1});const el=$('#attCount');if(el)el.textContent=`Presentes ${(c.P||0)+(c.T||0)}${c.T?' ('+c.T+' tarde)':''} · Ausentes ${c.A||0} · Lesionados ${c.L||0} · Sin marcar ${c['']||0}`}
 function saveAtt(e){
  e.preventDefault();const sid=editing&&editing.id;const s=S.sessions.find(x=>x.id===sid);if(!s)return;
- const att={};document.querySelectorAll('[data-att]').forEach(x=>{if(x.value)att[x.dataset.att]=x.value});
+ const att={},late={};document.querySelectorAll('[data-row-att]').forEach(r=>{const pid=r.dataset.rowAtt;const v=r.querySelector('[data-att]').value;if(v)att[pid]=v;const l=r.querySelector('[data-late]');if(v==='T'&&l&&+l.value>0)late[pid]=Math.round(+l.value)});
  let rpe=$('#att_rpe').value.trim();if(rpe!==''){rpe=Number(rpe.replace(',','.'));if(isNaN(rpe)||rpe<1||rpe>10){toast('El RPE va de 1 a 10.');return}}
- const body={...s,att,rpe,notes:$('#att_notes').value.trim(),editBy:me.uid,editAt:new Date().toISOString()};delete body.id;delete body.attendance;
+ const body={...s,att,late,rpe,notes:$('#att_notes').value.trim(),editBy:me.uid,editAt:new Date().toISOString()};delete body.id;delete body.attendance;
  setDoc(doc(db,'sessions',sid),body).catch(err=>toast(errMsg(err)));closeModal();toast('Asistencia guardada');
 }
-
+/* próximas sesiones en el link de cada jugador */
+const plNext=p=>sessOrder().filter(s=>!s.cancel&&s.date>=today()&&daysBetween(today(),s.date)<=7&&(!sGroup(s)||sGroup(s).includes(p.id))).slice(0,4).map(s=>({date:s.date,time:s.time||'',type:s.type||'Entrenamiento'}));
+let plTimer=0;
+function autoPlinks(){
+ if(!me||!['players','sessions','routines'].every(c=>LOADED.has(c)))return;clearTimeout(plTimer);
+ plTimer=setTimeout(()=>{const ps=S.players.filter(p=>p.linkId);if(!ps.length)return;const sig=JSON.stringify(ps.map(p=>[p.id,p.linkId,p.name,plNext(p)]));const key='ct_plsig_'+sq();
+  let old='';try{old=localStorage.getItem(key)||''}catch(_){}if(old===sig)return;try{localStorage.setItem(key,sig)}catch(_){}
+  ps.forEach(p=>{const routines=S.routines.filter(r=>isGym(r)&&Array.isArray(r.assigned)&&r.assigned.includes(p.id)).map(r=>({name:r.name||'',sid:r.shareId||ensureShare(r)}));setDoc(doc(db,'plinks',p.linkId),{player:p.id,name:p.name||'',club:club.name||'',routines,next:plNext(p),updatedAt:new Date().toISOString()}).catch(()=>{})})},2500);
+}
 /* ---------- suspender y pasar de día ---------- */
 const CX=[['lluvia','Lluvia o cancha en mal estado','Lluvia','por lluvia o cancha','por lluvia'],['feriado','Feriado','Feriado','por feriado','por el feriado'],['partido','Partido reprogramado','Partido reprog.','por partido reprogramado','porque se reprogramó el partido'],['ct','Decisión del cuerpo técnico','Decisión del CT','por decisión del CT','por decisión del cuerpo técnico'],['otro','Otro motivo','Otro','por otro motivo','']];
 const cxRow=k=>CX.find(x=>x[0]===k)||CX[4];
@@ -1574,7 +1650,7 @@ function sessSummary(s){
 function sessionSheet(s){
  const NUM=sessNums();const mc=microOf(s.date), ms=mesoOf(s.date);const tasks=sessTasks(s);const dur=sessDuration(s);
  const resp=memberName(s.by);const code=mdCode(s.date);const grp=sGroup(s);
- const meta=[['Fecha',longDate(s.date)],['Pasada del',s.movedFrom?longDate(s.movedFrom):''],['Hora',s.time?s.time+' h':''],['Día',code],['Tipo',s.type],['Duración',dur?dur+' min':''],['Espacio',s.space],['Para',grp?`Grupo de ${grp.length}: ${grp.map(plName).join(', ')}`:''],['Microciclo',mc?`MC ${microNum(mc)}${mc.type?' · '+mc.type:''}`:''],['Mesociclo',ms?ms.name:''],['Responsable',resp]].filter(x=>x[1]);
+ const meta=[['Fecha',longDate(s.date)],['Pasada del',s.movedFrom?longDate(s.movedFrom):''],['Hora',s.time?s.time+' h':''],['Día',code],['Tipo',s.type],['Duración',dur?dur+' min':''],['Espacio',s.space],['Para',grp?`Grupo de ${grp.length}: ${grp.map(plName).join(', ')}`:''],['Confirmaciones',!s.cancel&&s.date>=today()?(c=>c.y||c.n?`${c.y} vienen · ${c.n} no vienen · ${c.q} sin responder`:'')(confCounts(s)):''],['Microciclo',mc?`MC ${microNum(mc)}${mc.type?' · '+mc.type:''}`:''],['Mesociclo',ms?ms.name:''],['Responsable',resp]].filter(x=>x[1]);
  let lastPart=null;const total=tasks.reduce((a,t)=>a+(isNum(t.time)?+t.time:0),0);
  const out=!s.cancel&&!hasAtt(s)&&s.date>=today()?sessOut(s):[];const injOut=out.filter(o=>o.inj);
  return sheetHead('Hoja de sesión',s.cancel?null:NUM[s.id])
@@ -1759,15 +1835,15 @@ function syncPlink(p){
  let t=p.linkId;
  if(!t){t=randId(20);p.linkId=t;const body={...p};delete body.id;setDoc(doc(db,'players',p.id),body).catch(()=>{})}
  const routines=S.routines.filter(r=>isGym(r)&&Array.isArray(r.assigned)&&r.assigned.includes(p.id)).map(r=>({name:r.name||'',sid:ensureShare(r)}));
- setDoc(doc(db,'plinks',t),{player:p.id,name:p.name||'',club:club.name||'',routines,updatedAt:new Date().toISOString()}).catch(()=>{});
+ setDoc(doc(db,'plinks',t),{player:p.id,name:p.name||'',club:club.name||'',routines,next:plNext(p),updatedAt:new Date().toISOString()}).catch(()=>{});
  return t;
 }
 function openLinks(pid){
  if(!S.players.length){toast('Primero cargá el plantel.');return}
  const ps=pid?[pl(pid)].filter(Boolean):sortedPlayers();if(!ps.length)return;
- const msg=(p,url)=>`Hola ${String(p.name||'').trim().split(/\s+/)[0]}! Este es tu link personal${club.name?' de '+club.name:''}. Antes de entrenar cargá cómo llegaste y después tu esfuerzo (RPE). Guardalo en favoritos.\n${url}`;
+ const msg=(p,url)=>`Hola ${String(p.name||'').trim().split(/\s+/)[0]}! Este es tu link personal${club.name?' de '+club.name:''}. Avisá si venís a entrenar, antes de entrenar cargá cómo llegaste y después tu esfuerzo (RPE). Guardalo en favoritos.\n${url}`;
  editing=null;$('#mTitle').textContent=pid?'Link del jugador':'Links de los jugadores';
- $('#mBody').innerHTML=`<p style="margin:0">Cada jugador tiene su link personal. Desde ahí carga cómo llegó (sueño, cansancio, dolor, estrés), su esfuerzo después de entrenar y lo que hizo en el gimnasio, y ve las rutinas que tiene asignadas. No necesita cuenta y no ve ningún dato del equipo.</p>
+ $('#mBody').innerHTML=`<p style="margin:0">Cada jugador tiene su link personal. Desde ahí avisa si viene a los próximos entrenamientos, carga cómo llegó (sueño, cansancio, dolor, estrés), su esfuerzo después de entrenar y lo que hizo en el gimnasio, y ve las rutinas que tiene asignadas. No necesita cuenta y no ve ningún dato del equipo.</p>
  <div class="list">${ps.map(p=>{const url=playerUrl(syncPlink(p));return `<div class="row r-mail"><div class="main"><div class="t">${esc(p.name)}</div><div class="m"><span style="overflow-wrap:anywhere">${esc(url)}</span></div></div><div class="acts"><a class="btn sm primary" href="https://wa.me/?text=${encodeURIComponent(msg(p,url))}" target="_blank" rel="noopener">WhatsApp</a><button class="btn sm" type="button" data-act="copyurl" data-url="${esc(url)}">Copiar</button>${pid?`<a class="btn ghost sm" href="${esc(url)}" target="_blank" rel="noopener">Ver</a>`:''}</div></div>`}).join('')}</div>
  <p style="margin:0;font-size:13px;color:var(--muted)">El link es personal: quien lo tenga puede cargar datos a nombre de ese jugador, así que mandáselo solo a él.</p>`;
  showModal();
@@ -1786,6 +1862,7 @@ async function showPlayer(tok){
  const rts=(L.routines||[]).filter(r=>r&&r.sid);
  openDoc(`<div class="sh-head"><img src="logo.png" alt="Escudo del club"><div style="min-width:0"><div class="sh-club">${esc(L.club||'Cuerpo técnico')}</div><div class="eyebrow">Mi registro</div></div></div>
  <h1 class="sh-title">Hola, ${esc(String(L.name||'').trim().split(/\s+/)[0])}</h1>
+ ${(L.next||[]).filter(n=>n&&n.date>=today()).length?`<div class="pcard" id="confCard"><div><div class="eyebrow">Próximos entrenamientos</div><h3>¿Venís?</h3></div>${(L.next||[]).filter(n=>n&&n.date>=today()).map((n,i)=>{let prev='';try{prev=localStorage.getItem('conf_'+tok+'_'+n.date)||''}catch(_){}return `<div class="conf-it" data-ci="${i}" data-date="${n.date}"><div><b>${DOWL[parse(n.date).getDay()].replace(/^./,c=>c.toUpperCase())} ${fd(n.date)}</b>${n.time?' · '+esc(n.time)+' h':''} · ${esc(n.type||'')}</div><div class="conf-btns"><button type="button" class="btn ${prev==='Voy'?'primary':''}" data-act="pconf" data-v="Voy">Voy</button><button type="button" class="btn ${prev.startsWith('No voy')?'primary':''}" data-act="pconf" data-v="No">No voy</button></div><div class="conf-why" hidden><select aria-label="Motivo">${CONF_WHY.map(w=>`<option>${w[0]}</option>`).join('')}</select><input maxlength="200" placeholder="Comentario (opcional)"><button type="button" class="btn primary" data-act="pconfno">Avisar</button></div><p class="sent" ${prev?'':'hidden'}>${prev?'Ya avisaste: '+esc(prev)+'. Si cambia, tocá de nuevo.':''}</p><p class="err" hidden></p></div>`}).join('')}</div>`:''}
  <form class="pcard" id="wellFrm" novalidate><div><div class="eyebrow">Antes de entrenar</div><h3>Cómo llegué hoy</h3></div>
   ${WELL.map(w=>`<div class="fld"><span class="lb">${w[1]}</span>${seg(w[0],5,w[2],w[3])}</div>`).join('')}
   <div class="fld"><label for="w_zone">¿Te duele algo? ¿Dónde?</label><input id="w_zone" maxlength="80" placeholder="Opcional. Ej: isquiotibial derecho"></div>
@@ -1801,6 +1878,18 @@ async function showPlayer(tok){
  ${rts.length?`<div class="pcard"><div><div class="eyebrow">Gimnasio</div><h3>Mis rutinas</h3></div><div class="list">${rts.map(r=>`<a class="row click" style="text-decoration:none;color:inherit" href="#r-${esc(r.sid)}"><span class="t">${esc(r.name)}</span><span style="color:var(--accent);font-weight:600">Ver →</span></a>`).join('')}</div></div>`:''}
  <p style="margin:0;font-size:13px;color:var(--muted)">Tus respuestas las ve solo el cuerpo técnico. Guardá esta página en favoritos o en la pantalla de inicio.</p>`,
  `<div class="wrap"><span class="eyebrow">${esc(L.name||'')}</span></div>`);
+}
+async function sendConf(row,going){
+ if(!PL)return;const date=row.dataset.date;const sel=row.querySelector('.conf-why select'),inp=row.querySelector('.conf-why input');const ok=row.querySelector('.sent'),er=row.querySelector('.err');er.hidden=true;
+ const act=going?'Voy':'No voy · '+sel.value;const data={token:PL.tok,player:PL.L.player,kind:'conf',at:new Date().toISOString(),date,activity:act,note:going?'':inp.value.trim().slice(0,200)};
+ if(!navigator.onLine){er.textContent='Sin conexión. Probá de nuevo cuando tengas señal.';er.hidden=false;return}
+ row.querySelectorAll('button').forEach(b=>b.disabled=true);
+ try{await Promise.race([setDoc(doc(collection(db,'checkins')),data),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),15000))]);
+  try{localStorage.setItem('conf_'+PL.tok+'_'+date,going?'Voy':'No voy ('+sel.value.toLowerCase()+')')}catch(_){}
+  ok.textContent=going?'¡Listo! Avisaste que venís.':'Listo, el cuerpo técnico ya sabe que no venís.';ok.hidden=false;row.querySelector('.conf-why').hidden=true;
+  row.querySelectorAll('.conf-btns .btn').forEach(b=>b.classList.toggle('primary',(b.dataset.v==='Voy')===going));
+ }catch(e){er.textContent=e&&e.code==='permission-denied'?'No se pudo enviar: avisale al cuerpo técnico que falta habilitar las confirmaciones.':'No se pudo enviar. Probá de nuevo.';er.hidden=false}
+ row.querySelectorAll('button').forEach(b=>b.disabled=false);
 }
 async function sendCheckin(kind){
  if(!PL)return;const pre=kind==='well'?'well':'rpe';const errEl=$('#'+pre+'Err'),okEl=$('#'+pre+'Ok'),btn=$('#'+pre+'Frm button[type=submit]');
@@ -1878,8 +1967,14 @@ document.addEventListener('click',e=>{
  else if(a==='rowdel'){const card=b.closest('[data-row]');const box=card.parentElement;card.remove();renumRows(box)}
  else if(a==='rowup'){const card=b.closest('[data-row]');if(card.previousElementSibling){card.parentElement.insertBefore(card,card.previousElementSibling);renumRows(card.parentElement)}}
  else if(a==='rowdown'){const card=b.closest('[data-row]');if(card.nextElementSibling){card.parentElement.insertBefore(card.nextElementSibling,card);renumRows(card.parentElement)}}
- else if(a==='attall'){document.querySelectorAll('[data-att]').forEach(x=>{x.value=availability(x.dataset.att)[0]!=='Disponible'?'L':'P';x.className='s-'+x.value});attCount()}
- else if(a==='attclear'){document.querySelectorAll('[data-att]').forEach(x=>{x.value='';x.className='s-'});attCount()}
+ else if(a==='attall'){const s=S.sessions.find(x=>x.id===(editing&&editing.id));document.querySelectorAll('[data-row-att]').forEach(r=>{const p=pl(r.dataset.rowAtt);const d=s&&p?attDefault(p,s):'';const h=r.querySelector('[data-att]');if(d){h.value=d;attRowSet(r,attGrp(d)==='A'?'A':d);r.querySelector('[data-att]').value=d;const sel=r.querySelector('[data-reason]');if(sel)sel.value=d}else attRowSet(r,'P')});attCount()}
+ else if(a==='attclear'){document.querySelectorAll('[data-row-att]').forEach(r=>{r.querySelector('[data-att]').value='';r.querySelectorAll('.ab').forEach(b=>b.classList.remove('on'));r.querySelector('.ar-x').innerHTML=''});attCount()}
+ else if(a==='attv')attRowSet(b.closest('[data-row-att]'),b.dataset.v);
+ else if(a==='attwa')openAttWa();
+ else if(a==='attxls')attXls();
+ else if(a==='attpdf')attPdf();
+ else if(a==='pconf'){const row=b.closest('.conf-it');if(b.dataset.v==='Voy')sendConf(row,true);else row.querySelector('.conf-why').hidden=false}
+ else if(a==='pconfno')sendConf(b.closest('.conf-it'),false);
  else if(a==='gtab')setGTab(b.dataset.k);
  else if(a==='gnote')openGNote(b.dataset.k);
  else if(a==='gadd')openGAdd(b);
@@ -1946,7 +2041,10 @@ document.addEventListener('change',e=>{
  if(['rc_base','rc_pre','rc_sh'].includes(e.target.id))rcInput(e.target);
  if(e.target.closest('#gmFrm')&&e.target.tagName==='SELECT')gmRender();
  if(e.target.id==='gymFilter'){gymFilter=e.target.value;render()}
- if(e.target.dataset&&e.target.dataset.att!==undefined){e.target.className='s-'+e.target.value;attCount()}
+ if(e.target.matches&&e.target.matches('[data-reason]')){const r=e.target.closest('[data-row-att]');r.querySelector('[data-att]').value=e.target.value;attCount()}
+ if(e.target.name==='attview'){attView=e.target.value;render()}
+ if(e.target.id==='attFrom'){attFrom=e.target.value;render()}
+ if(e.target.id==='attTo'){attTo=e.target.value;render()}
  const g=e.target.closest('[data-group]');if(g)updCount(g.dataset.group);
 });
 document.addEventListener('input',e=>{

@@ -298,6 +298,19 @@ tr.click:hover td{background:var(--sunk)}
 .att-list{display:grid;border:1px solid var(--line);border-radius:10px;overflow:hidden;max-height:52vh;overflow-y:auto}
 .att-row{display:grid;grid-template-columns:32px minmax(0,1fr) minmax(150px,220px);gap:10px;align-items:center;padding:7px 10px;border-top:1px solid var(--line)}
 .att-row:first-child{border-top:0}
+.att-row2{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;align-items:center;padding:8px 10px;border-top:1px solid var(--line)}.att-row2:first-child{border-top:0}
+.ar-nm{display:flex;gap:8px;align-items:center;min-width:0}.ar-nm .n{font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--accent);min-width:24px;text-align:center}.ar-nm .nm{font-size:15px;font-weight:500;min-width:0}.ar-nm .pill{font-size:11px;margin-left:4px}
+.ar-btns{display:flex;gap:4px}.ab{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;min-height:40px}
+.ab.on.ab-P{background:var(--ok);border-color:var(--ok);color:#fff}.ab.on.ab-T{background:var(--amber);border-color:var(--amber);color:#fff}.ab.on.ab-A{background:var(--warn);border-color:var(--warn);color:#fff}.ab.on.ab-L{background:var(--muted);border-color:var(--muted);color:#fff}
+.ar-x{grid-column:1/-1}.ar-x:empty{display:none}.ar-x select,.ar-x input{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:var(--bg);font:inherit;font-size:14px}
+@media (max-width:560px){.att-row2{grid-template-columns:1fr}.ar-btns .ab{flex:1;padding:8px 4px}}
+.att-grid table{min-width:0}.att-grid th,.att-grid td{padding:6px 4px;text-align:center}.att-grid .ag-p{position:sticky;left:0;background:var(--surface);text-align:left;white-space:nowrap;padding-left:12px;z-index:1;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.att-grid thead .ag-p{background:var(--sunk)}.ag-d{font-size:10px;line-height:1.2;min-width:30px}.ag-d span{display:block}
+.ag-dot{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:6px;font-size:10px;font-weight:700;background:var(--sunk);color:var(--muted);padding:0 2px}
+.ag-dot.ok{background:var(--ok-soft);color:var(--ok)}.ag-dot.amber{background:var(--amber-soft);color:var(--amber)}.ag-dot.acc{background:var(--accent-soft);color:var(--accent)}.ag-dot.warn{background:var(--warn);color:#fff}.ag-dot.mut{background:var(--sunk);color:var(--muted)}
+.att-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}.att-legend>span{display:flex;gap:5px;align-items:center}
+.conf-it{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:8px}.conf-btns{display:flex;gap:8px}.conf-btns .btn{flex:1}.conf-why{display:grid;gap:6px}.conf-why select,.conf-why input{border:1px solid var(--line);border-radius:8px;padding:9px;font:inherit;background:var(--bg)}
+.conf-line{color:var(--muted)}.conf-line b{color:var(--ink)}
 .att-row .n{font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--accent);text-align:center}
 .att-row label{font-size:15px;text-transform:none;letter-spacing:0;color:var(--ink);font-weight:500}
 .att-row select{border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:var(--bg);width:100%;font-weight:600}
@@ -599,6 +612,6 @@ details.g-det h5{margin:0}
 <div id="big" hidden role="dialog" aria-label="Sesión en pantalla grande"></div>
 <div class="toast" id="toast" hidden></div>
 
-<script type="module" src="app.js?v=15"></script>
+<script type="module" src="app.js?v=16"></script>
 </body>
 </html>
