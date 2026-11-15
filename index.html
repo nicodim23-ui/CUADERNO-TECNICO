@@ -321,7 +321,12 @@ tr.click:hover td{background:var(--sunk)}
 .wcell{display:inline-grid;place-items:center;min-width:24px;height:22px;border-radius:6px;font-size:11px;font-weight:700;color:#fff;padding:0 3px}
 tr.ag-avg td{background:var(--sunk);font-size:12px;font-weight:600}
 .wgp .ag-p{font-size:12px}.wgp .ag-d{min-width:22px}.wgp .wv{min-width:20px;padding:1px 4px;font-size:12px}
-.conf-line{color:var(--muted)}.conf-line b{color:var(--ink)}
+.conf-line{color:var(--muted)}
+.gl-list{display:grid;gap:6px}.gl-row{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:6px}.gl-n{font-weight:600;font-size:15px}
+.gl-in{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.gl-in label{display:grid;gap:2px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}.gl-in input{border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;font-size:16px;background:var(--bg);width:100%;min-width:0}
+.prog-list{display:grid;gap:4px}.prog-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);padding:8px 0}.prog-row:first-child{border-top:0}.spark{flex:none}
+tr.wk-cur td{background:var(--accent-soft);font-weight:600}
+.gg-sec{display:grid;gap:6px;margin-bottom:14px}.conf-line b{color:var(--ink)}
 .att-row .n{font-family:var(--f-display);font-weight:700;font-size:20px;color:var(--accent);text-align:center}
 .att-row label{font-size:15px;text-transform:none;letter-spacing:0;color:var(--ink);font-weight:500}
 .att-row select{border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:var(--bg);width:100%;font-weight:600}
@@ -623,6 +628,6 @@ details.g-det h5{margin:0}
 <div id="big" hidden role="dialog" aria-label="Sesión en pantalla grande"></div>
 <div class="toast" id="toast" hidden></div>
 
-<script type="module" src="app.js?v=17"></script>
+<script type="module" src="app.js?v=18"></script>
 </body>
 </html>
