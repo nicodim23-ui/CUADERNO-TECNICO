@@ -1366,19 +1366,74 @@ function createGuideSessions(e){
 let libPat=LIB_PATTERNS[0];
 function libAll(){
  const ov={};S.exercises.forEach(d=>{ov[d.id]=d});
- const base=LIB.map(e=>{const o=ov[e.id];return o?{...e,video:safeUrl(o.video),img:okMedia(o.img)?o.img:'',cue:o.cue||e.cue}:{...e,video:'',img:''}});
- const custom=S.exercises.filter(d=>d.custom&&d.name).map(d=>({id:d.id,custom:true,pattern:d.pattern||LIB_PATTERNS[0],group:d.group||'Propios',name:d.name,level:+d.level||1,cue:d.cue||'',video:safeUrl(d.video),img:okMedia(d.img)?d.img:''}));
- return [...base,...custom];
+ const base=LIB.map(e=>{const o=ov[e.id];return o?{...e,video:safeUrl(o.video),img:okMedia(o.img)?o.img:'',cue:o.cue||e.cue,mat:o.mat,zones:o.zones}:{...e,video:'',img:''}});
+ const custom=S.exercises.filter(d=>d.custom&&d.name).map(d=>({id:d.id,custom:true,pattern:d.pattern||LIB_PATTERNS[0],group:d.group||'Propios',name:d.name,level:+d.level||1,cue:d.cue||'',video:safeUrl(d.video),img:okMedia(d.img)?d.img:'',mat:d.mat,zones:d.zones}));
+ return [...base,...custom].map(e=>({...e,mat:Array.isArray(e.mat)?e.mat:guessMat(e),zones:Array.isArray(e.zones)?e.zones:guessZones(e)}));
 }
 const libGroups=pat=>{const g=[];libAll().filter(e=>e.pattern===pat).forEach(e=>{if(!g.includes(e.group))g.push(e.group)});return g};
 const lvlPill=l=>`<span class="pill ${l===1?'ok':l===2?'acc':'amber'}">${LEVELS[l]||''}</span>`;
+/* material y zonas: se deducen del nombre y se pueden corregir */
+const MATS=[['Barra',/barra|landmine|sentadilla (frontal|trasera)|peso muerto (convencional|sumo|rumano$)|hip thrust|press (estricto|con impulso|inclinado)|segundo tiempo/],['Mancuernas o pesa rusa',/mancuerna|pesa rusa|kettlebell|goblet|granjero|carga de un solo lado|con pesa/],['Banda elástica',/banda|el[aá]stic|goma/],['Cajón o banco',/caj[oó]n|banco|step/],['Polea',/polea/],['Máquina',/m[aá]quina/],['Pelota o rueda',/pelota|rueda/],['Deslizador',/deslizador/],['Anillas o barra fija',/anillas|dominada|sost[eé]n arriba|remo invertido/],['Lastre o chaleco',/lastre|chaleco/],['Disco',/disco/],['Conos o vallas',/cono|valla|zigzag|5-0-5|color o n[uú]mero/],['Trineo',/trineo/],['Bastón',/bast[oó]n/]];
+const ZONES=[['Isquiotibiales',/isquio|n[oó]rdic|peso muerto|bisagra|buenos d[ií]as|balanceo|sprint/],['Aductores',/aductor|copenhague|sentadilla lateral|patinador|desplazamiento lateral|paso cruzado|paso abierto/],['Tobillo y pantorrilla',/tobillo|pogo|aterrizaje|salto|multisalto|skipping/],['Cuádriceps y rodilla',/sentadilla|zancada|subida al banco|split|aterrizaje|frenada|salto con ca[ií]da|profundidad/],['Glúteo y cadera',/gl[uú]teo|hip thrust|empuje de cadera|puente|cadera|almeja|caminata lateral/],['Core',/plancha|pallof|bicho muerto|perro de caza|rollout|curl-up|sierra|reloj|le[nñ]ador|granjero|levantamiento turco|elevaci[oó]n de tronco|rotaci[oó]n/],['Hombro y tren superior',/press|remo|dominada|flexiones|empuje a un brazo|sost[eé]n/],['Aceleración y cambios de dirección',/aceleraci|salida|sprint|5-0-5|zigzag|cambio|curva|espejo|persecuci|reacci/]];
+const guessMat=e=>MATS.filter(([,re])=>re.test(noAcc(e.name))).map(x=>x[0]);
+const guessZones=e=>{const n=noAcc(e.name+' '+e.group);const z=ZONES.filter(([,re])=>re.test(n)).map(x=>x[0]);if(!z.length&&e.pattern==='Core')z.push('Core');return z.slice(0,3)};
+let libQ='',libLvl='',libF='',libZone='';
+const libUse=()=>{const m={};S.routines.forEach(r=>(r.exercises||[]).forEach(x=>{if(x&&x.name){const k=noAcc(x.name).trim();(m[k]=m[k]||new Set()).add(r.id)}}));return m};
+const usedIn=(e,U)=>(U[noAcc(e.name).trim()]||new Set()).size;
+function libFiltered(){const q=noAcc(libQ).trim();return libAll().filter(e=>(!q||noAcc(e.name+' '+e.cue+' '+e.group).includes(q))&&(!libLvl||e.level===+libLvl)&&(!libF||(libF==='video'?e.video:libF==='novideo'?!e.video:libF==='propios'?e.custom:libF==='sinmat'?!e.mat.length:true))&&(!libZone||e.zones.includes(libZone)))}
+function libRow(e,U){const n=usedIn(e,U);
+ return `<div class="row r-lib click" data-act="libview" data-id="${esc(e.id)}">${e.img?`<img class="lib-thumb" data-media="${e.img}" alt="" hidden>`:'<span class="lib-thumb ph" aria-hidden="true"></span>'}<div class="main"><div class="t">${esc(e.name)} ${lvlPill(e.level)}${e.custom?' <span class="pill">Propio</span>':''}${e.video?' <span class="pill acc">▶ Video</span>':''}</div><div class="m"><span>${esc(e.cue)}</span></div><div class="m">${e.mat.length?`<span>${esc(e.mat.join(', '))}</span>`:'<span>Sin material</span>'}${e.zones.map(z=>`<span class="pill">${esc(z)}</span>`).join('')}${n?`<span>En ${n} rutina${n>1?'s':''}</span>`:''}</div></div><div class="acts"><button class="btn ghost sm" type="button" data-act="libtor" data-id="${esc(e.id)}">+ Rutina</button></div></div>`}
 function vLib(){
- const all=libAll();const list=all.filter(e=>e.pattern===libPat);const withVid=all.filter(e=>e.video).length;
- let out=`<div class="bar"><div><h2>Ejercicios</h2><p>Biblioteca por patrón de movimiento, de lo más simple a lo más complejo. ${all.length} ejercicios, ${withVid} con video cargado.</p></div><div class="tools"><button class="btn primary" type="button" data-act="libnew">+ Ejercicio propio</button></div></div>
- <div class="subnav">${LIB_PATTERNS.map(p=>`<button class="sub ${libPat===p?'on':''}" type="button" data-act="lpat" data-k="${esc(p)}">${esc(p)}<span class="num" style="margin-left:6px;opacity:.75">${all.filter(e=>e.pattern===p).length}</span></button>`).join('')}</div>`;
- libGroups(libPat).forEach(g=>{const rows=list.filter(e=>e.group===g).sort((a,b)=>a.level-b.level);
-  out+=`<div class="panel"><h3>${esc(g)} <small>${rows.length}</small></h3><div class="list" style="border:0;border-radius:0 0 12px 12px">${rows.map(e=>`<div class="row r-lib">${e.img?`<img class="lib-thumb" data-media="${e.img}" alt="" hidden>`:'<span class="lib-thumb ph" aria-hidden="true"></span>'}<div class="main"><div class="t">${esc(e.name)} ${lvlPill(e.level)}${e.custom?' <span class="pill">Propio</span>':''}</div><div class="m"><span>${esc(e.cue)}</span></div></div><div class="acts">${e.video?`<a class="btn ghost sm" href="${esc(e.video)}" target="_blank" rel="noopener">▶ Video</a>`:''}<button class="btn ghost sm" type="button" data-act="libedit" data-id="${esc(e.id)}">${e.video||e.img?'Editar':'Cargar video o imagen'}</button></div></div>`).join('')}</div></div>`});
- return out+`<p class="g-note">Al armar una rutina de gimnasio podés elegir los ejercicios de esta biblioteca: se copian con su video e imagen.</p>`;
+ const all=libAll();const withVid=all.filter(e=>e.video).length;const U=libUse();const L=libFiltered();const searching=libQ||libLvl||libF||libZone;
+ let out=`<div class="bar"><div><h2>Ejercicios</h2><p>Biblioteca por patrón de movimiento, de lo más simple a lo más complejo. ${all.length} ejercicios, ${withVid} con video cargado. Tocá uno para ver su ficha.</p></div><div class="tools"><button class="btn" type="button" data-act="libpdf">PDF</button><button class="btn primary" type="button" data-act="libnew">+ Ejercicio propio</button></div></div>
+ <div class="pl-ctl lib-ctl"><input class="flt" id="libQ" type="search" placeholder="Buscar en toda la biblioteca" value="${esc(libQ)}" autocomplete="off" aria-label="Buscar ejercicio"><select class="flt" id="libLvl" aria-label="Nivel"><option value="">Todos los niveles</option>${[1,2,3].map(l=>`<option value="${l}" ${+libLvl===l?'selected':''}>${LEVELS[l]}</option>`).join('')}</select><select class="flt" id="libZone" aria-label="Zona"><option value="">Todas las zonas</option>${ZONES.map(z=>[z[0],all.filter(e=>e.zones.includes(z[0])).length]).filter(z=>z[1]).map(z=>`<option value="${z[0]}" ${libZone===z[0]?'selected':''}>${z[0]} (${z[1]})</option>`).join('')}</select><select class="flt" id="libF" aria-label="Filtro"><option value="">Todos</option>${[['video','Con video'],['novideo','Sin video'],['sinmat','Sin material'],['propios','Propios']].map(o=>`<option value="${o[0]}" ${libF===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>${searching?'<button class="btn ghost sm" type="button" data-act="libclear">Limpiar</button>':''}</div><div id="libList">`;
+ if(searching){out+=L.length?`<div class="panel"><h3>Resultados <small>${L.length}</small></h3><div class="list" style="border:0;border-radius:0 0 12px 12px">${L.sort((a,b)=>LIB_PATTERNS.indexOf(a.pattern)-LIB_PATTERNS.indexOf(b.pattern)||a.level-b.level).map(e=>libRow(e,U)).join('')}</div></div>`:`<div class="empty"><strong>No hay ejercicios con esos filtros</strong><p>Probá con otra palabra o sacá algún filtro.</p></div>`;return out+'</div>'}
+ const top=all.map(e=>({e,n:usedIn(e,U)})).filter(x=>x.n).sort((a,b)=>b.n-a.n).slice(0,6);
+ if(top.length)out+=`<div class="panel"><h3>Los más usados en tus rutinas</h3><div class="list" style="border:0;border-radius:0 0 12px 12px">${top.map(x=>libRow(x.e,U)).join('')}</div></div>`;
+ out+=`<div class="subnav">${LIB_PATTERNS.map(p=>`<button class="sub ${libPat===p?'on':''}" type="button" data-act="lpat" data-k="${esc(p)}">${esc(p)}<span class="num" style="margin-left:6px;opacity:.75">${all.filter(e=>e.pattern===p).length}</span></button>`).join('')}</div>`;
+ libGroups(libPat).forEach(g=>{const rows=all.filter(e=>e.pattern===libPat&&e.group===g).sort((a,b)=>a.level-b.level);
+  out+=`<div class="panel"><h3>${esc(g)} <small>${rows.length} · de lo más fácil a lo más difícil</small></h3><div class="list" style="border:0;border-radius:0 0 12px 12px">${rows.map(e=>libRow(e,U)).join('')}</div></div>`});
+ return out+`</div><p class="g-note">Al armar una rutina de gimnasio podés elegir los ejercicios de esta biblioteca: se copian con su video e imagen.</p>`;
+}
+/* ficha del ejercicio */
+const ytEmbed=u=>{const m=String(u||'').match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([A-Za-z0-9_-]{6,15})/);return m?m[1]:''};
+function libNeighbors(e){const g=libAll().filter(x=>x.pattern===e.pattern&&x.group===e.group).sort((a,b)=>a.level-b.level);const i=g.findIndex(x=>x.id===e.id);return {prev:i>0?g[i-1]:null,next:i>=0&&i<g.length-1?g[i+1]:null}}
+function openLibView(id){
+ const e=libAll().find(v=>v.id===id);if(!e)return;const nb=libNeighbors(e);const rs=S.routines.filter(r=>(r.exercises||[]).some(x=>x&&noAcc(x.name).trim()===noAcc(e.name).trim()));const yt=ytEmbed(e.video);
+ openDoc(`<div class="eyebrow">${esc(e.pattern)} · ${esc(e.group)}</div><h1 class="sh-title">${esc(e.name)}</h1>
+ <div class="sh-meta">${[['Nivel',LEVELS[e.level]],['Material',e.mat.length?e.mat.join(', '):'Sin material'],['Zonas',e.zones.join(', ')],['Usado en',rs.length?rs.map(r=>r.name).join(', '):'']].filter(x=>x[1]).map(m=>`<div><div class="k">${m[0]}</div><div class="v">${esc(m[1])}</div></div>`).join('')}</div>
+ ${yt?`<div class="lib-vid noprint"><iframe src="https://www.youtube-nocookie.com/embed/${yt}" title="Video de ${esc(e.name)}" allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>`:e.video?`<div class="noprint"><a class="btn" href="${esc(e.video)}" target="_blank" rel="noopener">▶ Ver video</a></div>`:''}
+ ${e.img?`<img class="lib-big" data-media="${e.img}" alt="Imagen de ${esc(e.name)}" hidden>`:''}
+ ${e.cue?`<div class="sh-sec"><h3>Cómo se hace</h3><div style="font-size:16px">${esc(e.cue)}</div></div>`:''}
+ ${nb.prev||nb.next?`<div class="sh-sec"><h3>Progresión</h3><div class="lib-nb">${nb.prev?`<button class="lib-nbb" type="button" data-act="libview" data-id="${esc(nb.prev.id)}"><span class="eyebrow">Si le cuesta · más fácil</span><b>${esc(nb.prev.name)}</b>${lvlPill(nb.prev.level)}</button>`:'<span></span>'}${nb.next?`<button class="lib-nbb" type="button" data-act="libview" data-id="${esc(nb.next.id)}"><span class="eyebrow">Si le sale fácil · más difícil</span><b>${esc(nb.next.name)}</b>${lvlPill(nb.next.level)}</button>`:''}</div></div>`:''}`,
+ `<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools"><button class="btn primary" type="button" data-act="libtor" data-id="${esc(e.id)}">Agregar a una rutina</button><button class="btn" type="button" data-act="libedit" data-id="${esc(e.id)}">Editar</button></div></div>`);
+}
+/* agregar a una rutina */
+function openLibToRoutine(id){
+ const e=libAll().find(v=>v.id===id);if(!e)return;closeDoc();const R_=S.routines.filter(isGym).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+ if(!R_.length){toast('Primero creá una rutina de gimnasio.');return}
+ const blocks=r=>[...new Set((r.exercises||[]).map(x=>x&&x.block).filter(Boolean))];
+ $('#mTitle').textContent='Agregar a una rutina';
+ $('#mBody').innerHTML=`<form class="form" id="ltrFrm" data-id="${esc(id)}" novalidate><div class="fld full"><div class="ga-task"><b>${esc(e.name)}</b> ${lvlPill(e.level)}<div class="g-sub">${esc(e.cue)}</div></div></div>
+ <div class="fld full"><span class="lb">Rutina</span><div class="cx-why">${R_.map((r,i)=>`<label><input type="radio" name="ltr_r" value="${r.id}" ${i===0?'checked':''}><span>${esc(r.name)} <span class="g-sub">(${(r.exercises||[]).filter(x=>x&&x.name).length} ejercicios${blocks(r).length?' · '+blocks(r).join(', '):''})</span></span></label>`).join('')}</div></div>
+ <div class="fld"><label for="ltr_b">Bloque (opcional)</label><input id="ltr_b" list="ltr_bl" placeholder="Ej: Fuerza"><datalist id="ltr_bl">${[...new Set(R_.flatMap(blocks))].map(b=>`<option value="${esc(b)}">`).join('')}</datalist></div>
+ <div class="fld"><label for="ltr_sr">Series × reps</label><input id="ltr_sr" placeholder="Ej: 3 × 10"></div>
+ <div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">Agregar</button></div></form>`;showModal();
+}
+function saveLibToRoutine(f){
+ const e=libAll().find(v=>v.id===f.dataset.id);const r=f.querySelector('input[name="ltr_r"]:checked');if(!e||!r)return;const rt=S.routines.find(x=>x.id===r.value);if(!rt)return;
+ const m=$('#ltr_sr').value.match(/(\d+)\s*[x×]\s*(.+)/i);const blk=$('#ltr_b').value.trim();
+ const row={name:e.name,sets:m?m[1]:'',reps:m?m[2].trim():'',load:'',rest:'',notes:e.cue||'',block:blk,video:e.video||'',img:e.img||''};
+ const ex=(rt.exercises||[]).filter(x=>x&&x.name).map(x=>({...x}));let at=ex.length;if(blk){const li=ex.map(x=>x.block).lastIndexOf(blk);if(li>=0)at=li+1}ex.splice(at,0,row);
+ const body={...rt,exercises:ex,editBy:me.uid,editAt:new Date().toISOString()};delete body.id;
+ setDoc(doc(db,'routines',rt.id),body).then(()=>{if(rt.shareId)ensureShare({...body,id:rt.id})}).catch(err=>toast(errMsg(err)));closeModal();toast(`Agregado a “${rt.name}”`);
+}
+/* PDF de la biblioteca */
+function libPdf(){
+ const U=libUse();const L=(libQ||libLvl||libF||libZone)?libFiltered():libAll().filter(e=>e.pattern===libPat);const title=(libQ||libLvl||libF||libZone)?'Ejercicios · selección':'Ejercicios · '+libPat;
+ const groups=[];L.forEach(e=>{const k=e.pattern+' · '+e.group;let g=groups.find(x=>x.k===k);if(!g){g={k,L:[]};groups.push(g)}g.L.push(e)});
+ openDoc(sheetHead(esc(title))+groups.map(g=>`<div class="sh-sec"><h3>${esc(g.k)}</h3><div class="tablewrap sh-table"><table><thead><tr><th>Ejercicio</th><th>Nivel</th><th>Cómo se hace</th><th>Material</th></tr></thead><tbody>${g.L.sort((a,b)=>a.level-b.level).map(e=>`<tr><td><b>${esc(e.name)}</b>${e.video?'<div class="g-sub">Con video en la app</div>':''}</td><td>${LEVELS[e.level]}</td><td style="white-space:normal">${esc(e.cue)}</td><td>${esc(e.mat.join(', ')||'—')}</td></tr>`).join('')}</tbody></table></div></div>`).join(''),
+ `<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools"><button class="btn primary" type="button" data-act="print">Descargar PDF</button></div></div>`);
 }
 function openLibEdit(id){
  const e=id?libAll().find(v=>v.id===id):null;const isNew=!e;const custom=isNew||e.custom;
@@ -1391,7 +1446,9 @@ function openLibEdit(id){
  <div class="fld full"><label for="lb_group">Grupo</label><input id="lb_group" value="${esc(e?e.group:'')}" list="lb_groups" placeholder="Ej: Una pierna"><datalist id="lb_groups">${libGroups(pat).map(g=>`<option value="${esc(g)}">`).join('')}</datalist></div>`
  :`<div class="fld full"><span style="font-size:14px;color:var(--muted)">${esc(e.pattern)} · ${esc(e.group)} · ${LEVELS[e.level]}</span></div>`}
  <div class="fld full"><label for="lb_cue">Indicaciones</label><textarea id="lb_cue" rows="3">${esc(e?e.cue:'')}</textarea></div>
- <div class="fld full"><label for="lb_video">Video (link de YouTube)</label><input id="lb_video" type="url" inputmode="url" autocapitalize="off" value="${esc(e?e.video:'')}" placeholder="https://youtu.be/…"></div>
+ <div class="fld full"><span class="lb">Material</span><div class="g-days lb-chk">${MATS.map(m=>`<label><input type="checkbox" data-lbmat value="${m[0]}" ${e&&e.mat.includes(m[0])?'checked':''}><span>${m[0]}</span></label>`).join('')}</div><span class="hint">Si no marcás nada, queda como “sin material”.</span></div>
+ <div class="fld full"><span class="lb">Zonas que trabaja</span><div class="g-days lb-chk">${ZONES.map(z=>`<label><input type="checkbox" data-lbzone value="${z[0]}" ${e&&e.zones.includes(z[0])?'checked':''}><span>${z[0]}</span></label>`).join('')}</div></div>
+ <div class="fld full"><label for="lb_video">Video (link de YouTube)</label><input id="lb_video" type="url" inputmode="url" autocapitalize="off" value="${esc(e?e.video:'')}" placeholder="https://youtu.be/…"><span class="hint">Para un video propio, subilo a YouTube como “no listado” y pegá el link acá. En la ficha del ejercicio se ve adentro de la app.</span></div>
  <div class="fld full"><label for="lb_img">Imagen del ejercicio</label>${imgField('lb_img',e?e.img:'','img')}</div>
  <div class="formacts">${e&&e.custom?`<button type="button" class="btn ghost danger" data-act="del" data-col="exercises" data-id="${esc(e.id)}">Borrar</button>`:''}<button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">Guardar</button></div></form>`;
  hydrateMedia($('#mBody'));showModal();
@@ -1401,7 +1458,7 @@ function saveLib(ev){
  let video=$('#lb_video').value.trim();if(video&&!/^https?:\/\//i.test(video))video='https://'+video;
  if(video&&!safeUrl(video)){toast('Ese link de video no es válido.');return}
  const img=$('#libFrm .imgfld input[type=hidden]').value;
- const body={cue:$('#lb_cue').value.trim(),video,img:okMedia(img)?img:'',editBy:me.uid,editAt:new Date().toISOString()};
+ const body={cue:$('#lb_cue').value.trim(),video,img:okMedia(img)?img:'',mat:[...document.querySelectorAll('[data-lbmat]:checked')].map(c=>c.value),zones:[...document.querySelectorAll('[data-lbzone]:checked')].map(c=>c.value),editBy:me.uid,editAt:new Date().toISOString()};
  if(custom){const name=$('#lb_name').value.trim();if(!name){toast('Escribí el nombre del ejercicio.');return}
   Object.assign(body,{custom:true,name,pattern:$('#lb_pat').value,level:+$('#lb_lvl').value,group:$('#lb_group').value.trim()||'Propios'});libPat=body.pattern}
  const ref=id?doc(db,'exercises',id):doc(collection(db,'exercises'));
@@ -2153,7 +2210,11 @@ document.addEventListener('click',e=>{
  else if(a==='gpdf')guidePDF(b.dataset.k);
  else if(a==='lpat'){libPat=b.dataset.k;render()}
  else if(a==='libnew')openLibEdit(null);
- else if(a==='libedit')openLibEdit(b.dataset.id);
+ else if(a==='libedit'){closeDoc();openLibEdit(b.dataset.id)}
+ else if(a==='libview'){if(e.target.closest('.acts')&&!b.classList.contains('lib-nbb'))return;openLibView(b.dataset.id)}
+ else if(a==='libtor'){e.stopPropagation();openLibToRoutine(b.dataset.id)}
+ else if(a==='libpdf')libPdf();
+ else if(a==='libclear'){libQ='';libLvl='';libF='';libZone='';render()}
  else if(a==='libadd'){const ex=libAll().find(v=>v.id===$('#lp_ex').value);if(!ex)return;const box=document.querySelector('[data-rows="exercises"]');const first=box.querySelector('[data-row]');if(first&&box.children.length===1&&!first.querySelector('[data-c="name"]').value.trim())first.remove();box.insertAdjacentHTML('beforeend',rowCard('exercises',{name:ex.name,notes:ex.cue,video:ex.video,img:ex.img},0));renumRows(box);hydrateMedia(box);toast('Agregado: '+ex.name)}
  else if(a==='gyear')openGuideYear(b.dataset.k);
  else if(a==='gwarm')addWarmRoutine();
@@ -2196,6 +2257,9 @@ document.addEventListener('change',e=>{
  if(e.target.matches&&e.target.matches('[data-imgup]'))uploadRowImage(e.target);
  if(e.target.id==='gPeriod')saveGuide(e.target.value==='auto'?{perAuto:true}:{period:e.target.value,perAuto:false});
  if(e.target.id==='gTabSel')setGTab(e.target.value);
+ if(e.target.id==='libLvl'){libLvl=e.target.value;render()}
+ if(e.target.id==='libF'){libF=e.target.value;render()}
+ if(e.target.id==='libZone'){libZone=e.target.value;render()}
  if(e.target.name==='grpmode'){const bx=e.target.closest('.fld').querySelector('.grp-box');if(bx)bx.hidden=e.target.value!=='grp'}
  if(e.target.id==='f_model'&&e.target.value){const d=($('#f_date')||{}).value;useModel(e.target.value,d)}
  if(e.target.id==='util_ph')saveUtilPhone(e.target.value);
@@ -2226,6 +2290,7 @@ document.addEventListener('input',e=>{
  if(['rc_work','rc_pct','rc_rest','rc_try'].includes(id))rcInput(e.target);
  if(id.startsWith('ssg_')){SSGC[id.slice(4)]=e.target.value;const o=$('#ssgOut');if(o)o.innerHTML=ssgOutHTML()}
  if(id==='wa_txt'){const l=$('#waLink');if(l)l.href='https://wa.me/?text='+encodeURIComponent(e.target.value)}
+ if(id==='libQ'){libQ=e.target.value;const l=$('#libList');if(l){const tmp=document.createElement('div');tmp.innerHTML=vLib();const nl=tmp.querySelector('#libList');l.replaceWith(nl);hydrateMedia(nl)}}
  if(id==='sesQ'){sesQ=e.target.value;const l=$('#sesList');if(l)l.innerHTML=sesLists()}
  if(id==='tpickQ')tpickRender();
  if(id==='wa_util'||id==='util_ph'){const l=$('#waUtil');if(l)l.href=waHref($('#wa_util').value,($('#util_ph').value||'').replace(/\D/g,''))}
@@ -2238,6 +2303,7 @@ document.addEventListener('submit',e=>{
  if(id==='authFrm')return onAuthForm(e);
  if(id==='frm')return submitForm(e);
  if(id==='attFrm')return saveAtt(e);
+ if(id==='ltrFrm'){e.preventDefault();return saveLibToRoutine(e.target)}
  if(id==='gymLogFrm')return sendGymLog(e);
  if(id==='smFrm'){e.preventDefault();return saveModel(e.target)}
  if(id==='dupFrm'){e.preventDefault();const d=$('#dup_d').value;if(!d){toast('Elegí la fecha.');return}const sid=e.target.dataset.id;closeModal();return openForm('sessions',null,{copy:sid,date:d})}
