@@ -375,7 +375,7 @@ const ROWDEF={
 let raf=0; function render(){cancelAnimationFrame(raf);raf=requestAnimationFrame(doRender)}
 function doRender(){
  if($('#app').hidden)return;
- $('#clubName').textContent=club.name||'Mi equipo';
+ $('#clubName').textContent=club.name||'Mi equipo';applyClubLook();
  const tabs=[...TABS,['config','Configuración']];
  if(!tabs.some(t=>t[0]===tab))tab='resumen';
  $('#menuCur').textContent=(tabs.find(t=>t[0]===tab)||tabs[0])[1];
@@ -447,8 +447,10 @@ function pendings(NUM){
  if(apt.length)out.push({txt:`${apt.length} ${plural(apt.length,'apto médico vencido o por vencer','aptos médicos vencidos o por vencer')}`,names:apt.map(p=>`${p.name} (${daysBetween(t,p.apto)<0?'venció':'vence'} ${fd(p.apto)})`),act:'tab',k:'players',btn:'Ir a Plantel'});
  const noIft=sortedPlayers().filter(p=>!isGK(p)&&!lastTest(p.id,['30-15 IFT','30-15']));
  if(noIft.length&&S.players.length)out.push({txt:`${noIft.length} ${plural(noIft.length,'jugador','jugadores')} sin 30-15 IFT (lo usa la calculadora de Resistencia)`,names:noIft.map(p=>p.name),act:'tab',k:'tests',btn:'Ir a Tests'});
- return out;
+ const off=club.alertsOff||[];return out.filter(x=>!off.includes(alertKey(x.txt)));
 }
+const ALERTS=[['att','Asistencia sin tomar',/asistencia/i],['rpe','RPE sin cargar',/\bRPE\b/],['streak','Faltas seguidas y llegadas tarde',/seguidas|tarde/i],['well','Alertas de bienestar',/bienestar/i],['load','Subas de carga de golpe',/carga de golpe/i],['routine','Rutinas sin hacer',/rutina/i],['tests','Evaluaciones que tocan',/evaluar/i],['cards','Suspensiones y amarillas',/suspendid|amarillas/i],['sheet','Planillas de partido',/planilla/i],['apto','Aptos médicos',/apto/i],['ift','Jugadores sin 30-15 IFT',/30-15/]];
+const alertKey=t=>(ALERTS.find(a=>a[2].test(t))||['otro'])[0];
 let feedAll=false;
 function vResumen(){
  const n=S.players.length, inj=activeInj(), injPlayers=[...new Set(inj.map(i=>i.player))].filter(id=>pl(id));
@@ -559,6 +561,7 @@ const tLow=(name,unit)=>{const m=tmeta(name);if(m&&m.low!=null)return m.low;retu
 const BANDS=[['Bajo','warn'],['Medio','amber'],['Bueno','ok'],['Muy bueno','ok']];
 function tBand(name,v){const m=tmeta(name);if(!m||!m.b||!isNum(v))return null;const x=+v,[b1,b2,b3]=m.b;let i;if(m.low)i=x>b1?0:x>b2?1:x>b3?2:3;else i=x<b1?0:x<b2?1:x<b3?2:3;return BANDS[i]}
 const bandPill=(name,v)=>{const b=tBand(name,v);return b?`<span class="pill ${b[1]} tb">${b[0]}</span>`:''};
+const tcatDays=c=>+((club.testDays||{})[c])||TCAT_DAYS[c];
 const TCAT_DAYS={Composición:49,Fuerza:56,Saltos:7,Velocidad:49,Resistencia:56,Movilidad:84};
 const TBAT=[['Pretemporada',['Peso','CMJ','Sprint 10 m','Sprint 30 m','5-0-5','30-15 IFT']],['Control semanal',['CMJ','Aductores (apretar)']],['Velocidad',['Sprint 10 m','Sprint 30 m','Velocidad máxima','5-0-5']],['Composición',['Peso','Suma de 6 pliegues','% grasa']],['Fuerza',['Sentadilla (máximo estimado)','Hip thrust (máximo estimado)','Nordic']]];
 const nf=v=>String(Math.round(v*100)/100).replace('.',',');
@@ -601,7 +604,7 @@ function testCompare(name){
  <div class="tablewrap"><table><thead><tr><th>Jugador</th><th class="r">${fd(cmpA)}</th><th class="r">${fd(cmpB)}</th><th class="r">Cambio</th><th class="r">%</th></tr></thead><tbody>${ps.sort((x,y)=>{const dx=x.a!=null&&x.b!=null?(x.b-x.a)*(low?-1:1):-1e9,dy=y.a!=null&&y.b!=null?(y.b-y.a)*(low?-1:1):-1e9;return dy-dx}).map(x=>`<tr><td>${esc(x.p.name)}</td><td class="r num">${x.a!=null?nf(x.a):'–'}</td><td class="r num">${x.b!=null?nf(x.b):'–'}</td><td class="r">${x.a!=null&&x.b!=null?deltaHTML(x.b,x.a,low):''}</td><td class="r num">${x.a&&x.b!=null?(x.b>x.a?'+':'')+nf((x.b-x.a)/x.a*100)+' %':''}</td></tr>`).join('')}</tbody></table></div>`;
 }
 /* próxima evaluación */
-function testsCatState(){const t=today();return Object.keys(TCAT_DAYS).map(cat=>{const L=S.tests.filter(x=>pl(x.player)&&(tmeta(x.test)||{}).cat===cat);if(!L.length)return {cat,last:null};const last=L.map(x=>x.date).sort().pop();const d=daysBetween(last,t);return {cat,last,d,due:d>TCAT_DAYS[cat],every:TCAT_DAYS[cat]}})}
+function testsCatState(){const t=today();return Object.keys(TCAT_DAYS).map(cat=>{const L=S.tests.filter(x=>pl(x.player)&&(tmeta(x.test)||{}).cat===cat);if(!L.length)return {cat,last:null};const last=L.map(x=>x.date).sort().pop();const d=daysBetween(last,t);const ev=tcatDays(cat);return {cat,last,d,due:d>ev,every:ev}})}
 function testsDue(){const st=testsCatState();if(!st.some(x=>x.last))return '';
  return `<div class="panel"><h3>Próximas evaluaciones <small>según la guía</small></h3><div class="body"><div class="tdue">${st.map(x=>`<div class="tdue-i"><b>${x.cat}</b><span class="g-sub">${x.last?`última ${fd(x.last)} · ${x.every===7?'todas las semanas':'cada '+Math.round(x.every/7)+' semanas'}`:'nunca evaluado'}</span>${x.last?`<span class="pill ${x.due?'amber':'ok'}">${x.due?'Toca evaluar':'Al día'}</span>`:'<span class="pill">—</span>'}</div>`).join('')}</div></div></div>`}
 /* planilla de carga */
@@ -651,7 +654,7 @@ let injView='lista';
 const injDays=i=>{if(!i.date)return null;const end=i.status==='Alta'&&i.returned?i.returned:today();return Math.max(0,daysBetween(i.date,end))};
 const zKey=z=>noAcc(z).split(/[^a-zñ]+/).filter(x=>x.length>2)[0]||'';
 function injRelapse(i){if(!i.date)return null;return S.injuries.filter(o=>o.id!==i.id&&o.player===i.player&&o.returned&&o.returned<=i.date&&zKey(o.zone)===zKey(i.zone)&&daysBetween(o.returned,i.date)<=60).sort((a,b)=>b.returned.localeCompare(a.returned))[0]||null}
-function seasonStart(){const ms=sortStart(S.mesos);return ms.length?ms[0].start:addDays(today(),-365)}
+function seasonStart(){if(club.season&&club.season.start)return club.season.start;const ms=sortStart(S.mesos);return ms.length?ms[0].start:addDays(today(),-365)}
 function injStatsData(){const from=seasonStart();const L=S.injuries.filter(i=>i.date&&i.date>=from&&pl(i.player));const grp=k=>{const m={};L.forEach(i=>{const key=(typeof k==='function'?k(i):i[k])||'Sin dato';(m[key]=m[key]||{n:0,d:0}).n++;m[key].d+=injDays(i)||0});return Object.entries(m).sort((a,b)=>b[1].d-a[1].d||b[1].n-a[1].n)};return {from,L,zone:grp(i=>(i.zone||'').trim()||'Sin dato'),kind:grp('kind'),ctx:grp('context'),month:grp(i=>i.date.slice(0,7)).sort((a,b)=>a[0].localeCompare(b[0])),days:L.reduce((a,i)=>a+(injDays(i)||0),0)}}
 function injStepsHTML(i,small){const st=i.steps||{};const n=INJ_STEPS.filter(x=>st[x[0]]).length;return small?`<span class="inj-steps" title="${esc(INJ_STEPS.map(x=>(st[x[0]]?'✓ ':'○ ')+x[1]).join('\n'))}">${INJ_STEPS.map(x=>`<span class="isd ${st[x[0]]?'on':''}"></span>`).join('')}<span class="g-sub">${n}/5 para volver</span></span>`:''}
 function vInjuries(){
@@ -872,6 +875,15 @@ function saveSquads(){
  document.activeElement&&document.activeElement.blur();
  club={...club,squads:L};setDoc(doc(db,'config','club'),{...club,editBy:me.uid,editAt:new Date().toISOString()}).catch(err=>toast(errMsg(err)));derive();render();toast('Planteles guardados');
 }
+const stRow=x=>`<div class="st-row"><input data-st="name" value="${esc(x.name||'')}" placeholder="Nombre" aria-label="Nombre"><input data-st="role" value="${esc(x.role||'')}" list="stRoles" placeholder="Rol" aria-label="Rol"><input data-st="phone" type="tel" inputmode="tel" value="${esc(x.phone||'')}" placeholder="Celular" aria-label="Celular"><button type="button" class="linkbtn" data-act="stdel">Quitar</button><datalist id="stRoles"><option value="Entrenador"><option value="Ayudante de campo"><option value="Preparador físico"><option value="Entrenador de arqueros"><option value="Kinesiólogo"><option value="Médico"><option value="Utilero"><option value="Analista"></datalist></div>`;
+const HELP=[['Resumen','Lo que hay hoy, lo pendiente (asistencia, RPE, aptos, suspensiones…) y la actividad del cuerpo técnico.'],['Plantel','Ficha de cada jugador con contacto, salud, estado, tests, lesiones, asistencia y bienestar. Desde acá se generan los links de los jugadores.'],['Planificación','Mesociclos y microciclos de partido a partido. Tocando un microciclo ves los días con su MD, copiás las sesiones al siguiente y mandás la planilla semanal.'],['Guía','La metodología de referencia: año, semana tipo, sesiones guía, capacidades, calculadoras y qué datos registrar. Cada sección tiene lugar para las notas del cuerpo técnico.'],['Sesiones','Hoja de cada sesión con tareas, pantalla grande, asistencia, mensajes al utilero y al cuerpo técnico, suspender o pasar de día.'],['Asistencia','Se toma desde cada sesión con botones grandes. Tabla, grilla por sesión, resumen por WhatsApp y confirmaciones de los jugadores.'],['Bienestar','Lo cargan los jugadores desde su link: cómo llegan y su esfuerzo. Alertas, semana, carga individual y recordatorios.'],['Gimnasio','Seguimiento semanal de quién va, registros (los carga el jugador con “Hice esta rutina”) y progresión de cargas.'],['Ejercicios','Biblioteca por patrón, con ficha, video, material, zonas y progresión. Se agregan a las rutinas.'],['Rutinas','De campo y de gimnasio: prevención, readaptación por fases, semanas con % del máximo. Se mandan al jugador.'],['Tests','Planilla para cargar a todos juntos, ranking, comparación entre evaluaciones, niveles y ficha PDF.'],['Lesiones','Parte diario, pasos para volver, estadísticas, recaídas y parte por WhatsApp.'],['Partidos','Fixture, convocatoria, planilla de cada jugador (minutos, goles, tarjetas, cambios), suspensiones y estadísticas.']];
+function backup(from,to){
+ const inR=d=>!from||!d||(d>=from&&(!to||d<=to));const pick=c=>(R[c]||[]).filter(x=>inR(x.date||x.start));
+ const data={app:'Cuaderno del Cuerpo Técnico',exported:new Date().toISOString(),by:pname(me.uid),range:from?{from,to}:null,club:{...club},members:Object.fromEntries(Object.entries(members).map(([k,v])=>[k,{name:v.name||''}]))};
+ COLS.forEach(c=>{data[c]=c==='players'||c==='routines'||c==='exercises'?(R[c]||[]):pick(c)});
+ const txt=JSON.stringify(data,null,1);try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download=`cuaderno-copia-${from?from+'-a-'+(to||today()):today()}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast('Copia descargada')}catch(_){toast('No se pudo descargar el archivo.')}
+}
+const saveClub=(patch,msg)=>{club={...club,...patch,editBy:me.uid,editAt:new Date().toISOString()};setDoc(doc(db,'config','club'),{...club}).catch(err=>toast(errMsg(err)));if(msg)toast(msg)};
 function vConfig(){
  const admin=isAdmin();
  let h=`<div class="bar"><div><h2>Configuración</h2><p>${admin?'Datos del equipo, accesos del cuerpo técnico y tu cuenta.':'Tu cuenta y datos del equipo.'}</p></div></div>`;
@@ -880,6 +892,29 @@ function vConfig(){
   ?`<form id="clubFrm" class="form" novalidate><div class="fld full"><label for="clubIn">Nombre del equipo o categoría</label><input id="clubIn" value="${esc(club.name)}" placeholder="Ej: Primera división" required><span class="hint">Es el nombre que aparece arriba, al lado del escudo.</span></div><div class="formacts"><button class="btn primary" type="submit">Guardar nombre</button></div></form>`
   :`<div class="mini"><div><span style="color:var(--muted)">Nombre</span><span>${esc(club.name||'Mi equipo')}</span></div></div><p class="hint" style="margin:8px 0 0;font-size:13px;color:var(--muted)">Solo el administrador puede cambiar los datos del equipo.</p>`}</div></div>`;
  if(admin){const L=squads();h+=`<div class="panel"><h3>Planteles o categorías <small>${L.length}</small></h3><div class="body"><form id="sqFrm" class="form" novalidate><p class="full" style="margin:0;color:var(--muted);font-size:14px">Si manejan más de un plantel (por ejemplo, Primera y Reserva), cargalos acá. Arriba aparece un selector para pasar de uno a otro, y cada uno tiene sus jugadores, sesiones, partidos y planificación. Las rutinas, los ejercicios y la Guía son compartidos.</p><div class="full sq-list" id="sqList">${L.map((x,i)=>sqRow(x,i)).join('')}</div><div class="full"><button class="btn sm" type="button" data-act="sqadd">+ Agregar plantel</button></div><div class="formacts"><button class="btn primary" type="submit">Guardar planteles</button></div></form></div></div>`}
+ // Datos del club
+ h+=`<div class="panel"><h3>Escudo, colores y nombre corto</h3><div class="body">${admin?`<form id="lookFrm" class="form" novalidate><div class="fld"><label for="lk_short">Nombre corto</label><input id="lk_short" value="${esc(club.short||'')}" maxlength="40" placeholder="Ej: CAAC Primera"><span class="hint">Va en los PDF y en los links de los jugadores. Si lo dejás vacío, se usa el nombre del equipo.</span></div>
+ <div class="fld"><label for="lk_color">Color principal</label><div style="display:flex;gap:8px;align-items:center"><input id="lk_color" type="color" value="${/^#[0-9a-f]{6}$/i.test(club.color||'')?club.color:'#163C84'}" style="width:56px;height:40px;padding:2px"><button type="button" class="btn ghost sm" data-act="lkreset">Volver al azul</button></div><span class="hint">La barra de arriba y los botones toman este color.</span></div>
+ <div class="fld full"><span class="lb">Escudo</span>${imgField('lk_logo',club.logo||'','logo')}<span class="hint">Una imagen cuadrada, con fondo transparente o blanco. Si no cargás ninguno, queda el escudo actual.</span></div>
+ <div class="formacts"><button class="btn primary" type="submit">Guardar</button></div></form>`:`<div class="mini"><div><span style="color:var(--muted)">Nombre corto</span><span>${esc(club.short||club.name||'')}</span></div></div>`}</div></div>`;
+ // Temporada
+ {const ss=club.season||{};const hist=Array.isArray(club.seasons)?club.seasons:[];
+ h+=`<div class="panel"><h3>Temporada</h3><div class="body" style="display:grid;gap:12px">${admin?`<form id="seasFrm" class="form" novalidate><div class="fld"><label for="ss_name">Nombre</label><input id="ss_name" value="${esc(ss.name||'')}" placeholder="Ej: Temporada 2027"></div><div class="fld"><label for="ss_start">Empieza</label><input id="ss_start" type="date" value="${esc(ss.start||'')}"></div><div class="fld"><label for="ss_end">Termina</label><input id="ss_end" type="date" value="${esc(ss.end||'')}"></div><p class="full g-sub" style="margin:0">Desde esta fecha se cuentan las estadísticas de partidos, lesiones y jugadores. Si no la ponés, se toma el inicio del primer mesociclo (${fdy(sortStart(S.mesos)[0]?sortStart(S.mesos)[0].start:addDays(today(),-365))}).</p><div class="formacts"><button class="btn" type="button" data-act="seasnew">Empezar temporada nueva</button><button class="btn primary" type="submit">Guardar</button></div></form>`:`<div class="mini"><div><span style="color:var(--muted)">Desde</span><span>${fdy(seasonStart())}</span></div></div>`}
+ ${hist.length?`<div><span class="lb">Temporadas anteriores</span><div class="list">${hist.map((x,i)=>`<div class="row r-std"><div class="main"><div class="t">${esc(x.name||'Temporada')}</div><div class="m"><span>${fdy(x.start)} al ${fdy(x.end)}</span></div></div><div class="acts"><button class="btn ghost sm" type="button" data-act="backup" data-from="${x.start}" data-to="${x.end}">Descargar copia</button></div></div>`).join('')}</div></div>`:''}</div></div>`;}
+ // Ajustes generales
+ {const g=gset();h+=`<div class="panel"><h3>Ajustes generales</h3><div class="body"><form id="genFrm" class="form" novalidate>
+ <div class="fld full"><span class="lb">Días de entrenamiento</span>${dayChecks(g.trainDays,'data-genday')}</div>
+ <div class="fld"><label for="gen_time">Hora habitual</label><input id="gen_time" type="time" value="${esc(g.time||'19:00')}"></div>
+ <div class="fld"><label for="gen_y">Amarillas para suspensión</label><select id="gen_y">${[3,4,5,6].map(n=>`<option ${yLimit()===n?'selected':''}>${n}</option>`).join('')}</select></div>
+ <div class="fld"><label for="gen_util">Celular del utilero</label><input id="gen_util" type="tel" inputmode="tel" value="${esc(club.utilPhone||'')}" placeholder="Ej: 5491123456789"></div>
+ <div class="fld full"><span class="lb">Cada cuánto evaluar (semanas)</span><div class="gen-tests">${Object.keys(TCAT_DAYS).map(c=>`<label>${c}<input type="number" min="1" max="26" data-tcat="${c}" value="${Math.round(tcatDays(c)/7)}"></label>`).join('')}</div></div>
+ <div class="formacts"><button class="btn primary" type="submit">Guardar ajustes</button></div></form></div></div>`;}
+ // Contactos del cuerpo técnico
+ {const L=staffList();h+=`<div class="panel"><h3>Contactos del cuerpo técnico <small>${L.length}</small></h3><div class="body"><form id="staffFrm" class="form" novalidate><p class="full g-sub" style="margin:0">Con el celular cargado, los mensajes de las sesiones se mandan directo a cada uno. El que tenga rol “Utilero” recibe el mensaje de materiales.</p><div class="full st-list" id="stList">${(L.length?L:[{}]).map(stRow).join('')}</div><div class="full"><button type="button" class="btn sm" data-act="stadd">+ Agregar contacto</button></div><div class="formacts"><button class="btn primary" type="submit">Guardar contactos</button></div></form></div></div>`;}
+ // Avisos
+ {const off=club.alertsOff||[];h+=`<div class="panel"><h3>Avisos en Pendientes</h3><div class="body"><p class="g-sub" style="margin:0 0 8px">Destildá los que no quieran ver en el Resumen. Vale para todo el cuerpo técnico.</p><div class="g-days al-list">${ALERTS.map(a=>`<label><input type="checkbox" data-alert="${a[0]}" ${off.includes(a[0])?'':'checked'}><span>${a[1]}</span></label>`).join('')}</div></div></div>`;}
+ // Copia de seguridad
+ h+=`<div class="panel"><h3>Copia de seguridad</h3><div class="body" style="display:grid;gap:8px"><p style="margin:0;font-size:14px">Descarga un archivo con todos los datos de ${squads().length>1?'todos los planteles':'el plantel'}: jugadores, sesiones, asistencia, bienestar, tests, lesiones, rutinas, partidos y planificación. Guardalo en tu computadora o en el Drive.</p><div><button class="btn" type="button" data-act="backup">Descargar copia completa</button></div></div></div>`;
  // Accesos
  if(admin){
   const emails=(access&&access.emails)||[];const byMail={};Object.entries(members).forEach(([id,m])=>{if(m.email)byMail[m.email]={id,...m}});
@@ -895,6 +930,8 @@ function vConfig(){
   <form id="meFrm" class="form" novalidate><div class="fld"><label for="meName">Tu nombre</label><input id="meName" value="${esc(me.displayName||'')}" autocomplete="name" required><span class="hint">Así te ven los demás en la actividad.</span></div><div class="fld"><span class="lb">Mail</span><input value="${esc(me.email)}" disabled aria-label="Mail"></div><div class="formacts"><button class="btn primary" type="submit">Guardar nombre</button></div></form>
   <div class="formacts" style="justify-content:flex-start;border-top:1px solid var(--line);padding-top:14px"><button class="btn" type="button" data-act="pwreset">Cambiar contraseña</button><button class="btn danger" type="button" data-act="logout">Cerrar sesión</button></div>
  </div></div>`;
+ // Ayuda
+ h+=`<div class="panel"><h3>Ayuda rápida</h3><div class="body help-list">${HELP.map(x=>`<details><summary><b>${x[0]}</b></summary><p>${x[1]}</p></details>`).join('')}</div></div>`;
  // Instalar
  h+=`<div class="panel"><h3>Instalar en el teléfono</h3><div class="body"><ol style="margin:0;padding-left:20px;display:grid;gap:4px;font-size:14px"><li>Abrí la app en <b>Safari</b> (en Android, en Chrome).</li><li>Tocá el botón <b>Compartir</b> (en Android, el menú ⋮).</li><li>Elegí <b>Agregar a inicio</b>.</li></ol></div></div>`;
  return h;
@@ -1032,6 +1069,11 @@ function fieldHTML(f,v){
 /* videos e imágenes de tareas y ejercicios */
 const safeUrl=u=>/^https?:\/\/[^\s"'<>]+$/i.test(u||'')?u:'';
 const okMedia=v=>/^[A-Za-z0-9]{12,40}$/.test(v||'');
+function hydrateLogos(root){(root||document).querySelectorAll('img[data-logo]').forEach(im=>{const id=im.dataset.logo;if(im.dataset.done===id)return;im.dataset.done=id;mediaSrc(id).then(src=>{if(src)im.src=src}).catch(()=>{})})}
+let lookKey='';
+function applyClubLook(){const c=/^#[0-9a-f]{6}$/i.test(club.color||'')?club.color:'';const k=c+'|'+(club.logo||'');if(k===lookKey)return;lookKey=k;const r=document.documentElement.style;
+ if(c){r.setProperty('--brand',c);let dark=false;try{dark=matchMedia('(prefers-color-scheme: dark)').matches}catch(_){}if(!dark){r.setProperty('--accent',c);r.setProperty('--accent-soft',`color-mix(in srgb, ${c} 14%, white)`)}}else{['--brand','--accent','--accent-soft'].forEach(v=>r.removeProperty(v))}
+ const cr=document.querySelector('.club .crest');if(cr){if(okMedia(club.logo)){cr.dataset.logo=club.logo;delete cr.dataset.done;hydrateLogos(cr.parentNode)}else{cr.src='logo.png';delete cr.dataset.logo}}}
 const mediaHTML=x=>`${okMedia(x.img)?`<img class="t-img" data-media="${x.img}" alt="" hidden>`:''}${safeUrl(x.video)?`<div><a class="vid noprint" href="${esc(x.video)}" target="_blank" rel="noopener">▶ Ver video</a></div>`:''}`;
 const MEDIA=new Map();
 function mediaSrc(id){if(!MEDIA.has(id))MEDIA.set(id,getDoc(doc(db,'public',id)).then(s=>{const d=s.exists()?s.data().data:'';return typeof d==='string'&&d.startsWith('data:image/')?d:''}).catch(()=>{MEDIA.delete(id);return ''}));return MEDIA.get(id)}
@@ -1891,7 +1933,7 @@ function autoPlinks(){
  if(!me||!['players','sessions','routines','tests','checkins','injuries'].every(c=>LOADED.has(c)))return;clearTimeout(plTimer);
  plTimer=setTimeout(()=>{const ps=S.players.filter(p=>p.linkId);if(!ps.length)return;const sig=JSON.stringify(ps.map(p=>[p.id,p.linkId,p.name,plNext(p),S.routines.filter(r=>Array.isArray(r.assigned)&&r.assigned.includes(p.id)).map(r=>[r.id,r.shareId,isGym(r)?rmMap(p,r):0]),activeInj().filter(i=>i.player===p.id&&i.rehab).map(i=>[i.rehab,i.phase])]));const key='ct_plsig_'+sq();
   let old='';try{old=localStorage.getItem(key)||''}catch(_){}if(old===sig)return;try{localStorage.setItem(key,sig)}catch(_){}
-  ps.forEach(p=>{const routines=plRoutines(p);setDoc(doc(db,'plinks',p.linkId),{player:p.id,name:p.name||'',club:club.name||'',routines,next:plNext(p),updatedAt:new Date().toISOString()}).catch(()=>{})})},2500);
+  ps.forEach(p=>{const routines=plRoutines(p);setDoc(doc(db,'plinks',p.linkId),{player:p.id,name:p.name||'',club:club.short||club.name||'',logo:okMedia(club.logo)?club.logo:'',routines,next:plNext(p),updatedAt:new Date().toISOString()}).catch(()=>{})})},2500);
 }
 /* ---------- suspender y pasar de día ---------- */
 const CX=[['lluvia','Lluvia o cancha en mal estado','Lluvia','por lluvia o cancha','por lluvia'],['feriado','Feriado','Feriado','por feriado','por el feriado'],['partido','Partido reprogramado','Partido reprog.','por partido reprogramado','porque se reprogramó el partido'],['ct','Decisión del cuerpo técnico','Decisión del CT','por decisión del CT','por decisión del cuerpo técnico'],['otro','Otro motivo','Otro','por otro motivo','']];
@@ -2024,7 +2066,7 @@ function gymXls(){
  try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=`gimnasio-${today()}.csv`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}catch(_){toast('No se pudo descargar el archivo.')}
 }
 function publicRoutine(r){
- return {type:'routine',kind:isGym(r)?'Gimnasio':'campo',club:club.name||'',name:r.name||'',category:r.category||'',duration:r.duration??'',freq:r.freq??'',phases:rPhases(r).map(p=>({name:p.name||'',criteria:p.criteria||''})),target:r.target||'',indications:r.indications||'',start:r.start||'',weeks:(r.weeks||[]).filter(w=>w&&(w.sets||w.reps||w.pct)).map(w=>({sets:w.sets||'',reps:w.reps||'',pct:w.pct||'',notes:w.notes||''})),exercises:rEx(r).map(x=>({name:x.name||'',sets:x.sets||'',reps:x.reps||'',load:x.load||'',prog:x.prog||'',rest:x.rest||'',notes:x.notes||'',block:x.block||'',video:safeUrl(x.video),img:okMedia(x.img)?x.img:''})),updatedAt:new Date().toISOString()};
+ return {type:'routine',kind:isGym(r)?'Gimnasio':'campo',club:club.short||club.name||'',logo:okMedia(club.logo)?club.logo:'',name:r.name||'',category:r.category||'',duration:r.duration??'',freq:r.freq??'',phases:rPhases(r).map(p=>({name:p.name||'',criteria:p.criteria||''})),target:r.target||'',indications:r.indications||'',start:r.start||'',weeks:(r.weeks||[]).filter(w=>w&&(w.sets||w.reps||w.pct)).map(w=>({sets:w.sets||'',reps:w.reps||'',pct:w.pct||'',notes:w.notes||''})),exercises:rEx(r).map(x=>({name:x.name||'',sets:x.sets||'',reps:x.reps||'',load:x.load||'',prog:x.prog||'',rest:x.rest||'',notes:x.notes||'',block:x.block||'',video:safeUrl(x.video),img:okMedia(x.img)?x.img:''})),updatedAt:new Date().toISOString()};
 }
 function shareRoutine(id){
  const r=S.routines.find(x=>x.id===id);if(!r)return;
@@ -2041,9 +2083,9 @@ function shareRoutine(id){
 }
 
 /* ---------- hojas (sesión y rutina) ---------- */
-function openDoc(html,bar){$('#docBar').innerHTML=bar;$('#docPage').innerHTML=html;hydrateMedia($('#docPage'));$('#doc').hidden=false;$('#doc').scrollTop=0;document.body.style.overflow='hidden'}
+function openDoc(html,bar){$('#docBar').innerHTML=bar;$('#docPage').innerHTML=html;hydrateMedia($('#docPage'));hydrateLogos($('#docPage'));$('#doc').hidden=false;$('#doc').scrollTop=0;document.body.style.overflow='hidden'}
 function closeDoc(){if($('#doc').hidden)return;$('#doc').hidden=true;if($('#modal').hidden)document.body.style.overflow=''}
-const sheetHead=(title,no)=>`<div class="sh-head"><img src="logo.png" alt="Escudo del club"><div style="min-width:0"><div class="sh-club">${esc(club.name||'Cuerpo técnico')}</div><div class="eyebrow">${title}</div></div>${no!=null?`<div class="sh-no"><div class="k">Sesión N°</div><div class="v">${no}</div></div>`:''}</div>`;
+const sheetHead=(title,no)=>`<div class="sh-head"><img src="logo.png" ${okMedia(club.logo)?`data-logo="${club.logo}"`:''} alt="Escudo del club"><div style="min-width:0"><div class="sh-club">${esc(club.short||club.name||'Cuerpo técnico')}</div><div class="eyebrow">${title}</div></div>${no!=null?`<div class="sh-no"><div class="k">Sesión N°</div><div class="v">${no}</div></div>`:''}</div>`;
 function bigTasks(s){const T=sessTasks(s);const r=s.routine&&S.routines.find(x=>x.id===s.routine);if(!r)return T;const ex=rEx(r);
  const t={part:['Activación','Movilidad','Prevención'].includes(r.category)?'Entrada en calor':'Parte principal',name:'Rutina: '+r.name,time:isNum(r.duration)?+r.duration:'',space:'',org:r.target||'',desc:ex.map(x=>x.name+([x.sets&&x.reps?x.sets+'×'+x.reps:(x.sets||x.reps||'')].filter(Boolean).length?' '+(x.sets&&x.reps?x.sets+'×'+x.reps:(x.sets||x.reps)):'')).join('\n'),mat:''};
  if(t.part==='Entrada en calor'){const i=T.findIndex(x=>x.part!=='Entrada en calor');const at=i<0?T.length:i;return [...T.slice(0,at),t,...T.slice(at)]}return [...T,t]}
@@ -2099,9 +2141,12 @@ function utilMsg(s){
  return [`Hola! Entrenamiento ${relDay(s.date)}${dayLong(s.date)}${s.time?' a las '+s.time+' h':''}.`,spaces.length?'\nEspacios:\n'+spaces.map(x=>'- '+x).join('\n'):'',mats.length?'\nMateriales:\n'+mats.map(x=>'- '+x).join('\n'):'\nMateriales: los de siempre.',`\n${ready?'¿Lo podés tener listo para las '+ready+' h?':'¿Lo podés tener listo media hora antes?'} Gracias!`].filter(Boolean).join('\n');
 }
 const waHref=(txt,ph)=>`https://wa.me/${ph||''}?text=${encodeURIComponent(txt)}`;
-function msgBoxes(s){const ph=(club.utilPhone||'').replace(/\D/g,'');
+const staffList=()=>(Array.isArray(club.staff)?club.staff:[]).filter(x=>x&&x.name);
+const staffLinks=()=>staffList().filter(x=>waPhone(x.phone)&&!/utiler/i.test(x.role||'')).map(x=>`<a class="btn ghost sm" data-act="waone" data-ph="${waPhone(x.phone)}" href="#" target="_blank" rel="noopener">${esc(x.name.split(/\s+/)[0])}</a>`).join('');
+const utilFromStaff=()=>{const u=staffList().find(x=>/utiler/i.test(x.role||'')&&waPhone(x.phone));return u?waPhone(u.phone):''};
+function msgBoxes(s){const ph=((club.utilPhone||'').replace(/\D/g,''))||utilFromStaff();
  return `<div class="msg-box"><div class="msg-h"><b>Para el utilero</b><span class="g-sub">Espacios y materiales, para que prepare todo antes.</span></div><textarea id="wa_util" rows="8">${esc(utilMsg(s))}</textarea><div class="fld"><label for="util_ph">Celular del utilero (opcional)</label><input id="util_ph" type="tel" inputmode="tel" value="${esc(club.utilPhone||'')}" placeholder="Ej: 5491123456789"><span class="hint">Con código de país y sin el 0 ni el 15. Si lo cargás, el mensaje le llega directo.</span></div><a class="btn primary" id="waUtil" href="${waHref(utilMsg(s),ph)}" target="_blank" rel="noopener">Enviar al utilero</a></div>
- <div class="msg-box"><div class="msg-h"><b>Para el cuerpo técnico</b><span class="g-sub">Horario, objetivo y tareas.</span></div><textarea id="wa_staff" rows="8">${esc(staffMsg(s))}</textarea><a class="btn" id="waStaff" href="${waHref(staffMsg(s))}" target="_blank" rel="noopener">Enviar por WhatsApp</a></div>`}
+ <div class="msg-box"><div class="msg-h"><b>Para el cuerpo técnico</b><span class="g-sub">Horario, objetivo y tareas.</span></div><textarea id="wa_staff" rows="8">${esc(staffMsg(s))}</textarea><div class="tools" style="gap:6px"><a class="btn" id="waStaff" href="${waHref(staffMsg(s))}" target="_blank" rel="noopener">Enviar por WhatsApp</a>${staffLinks()}</div></div>`}
 function openMsgs(sid){const s=S.sessions.find(x=>x.id===sid);if(!s)return;closeDoc();
  $('#mTitle').textContent='Mensajes de la sesión';$('#mBody').innerHTML=`<div class="form">${msgBoxes(s)}<div class="formacts"><button type="button" class="btn" data-act="close">Listo</button></div></div>`;showModal()}
 function sessSaved(s){
@@ -2166,7 +2211,7 @@ function routineSheet(r,ctx={}){
  const meta=[['Objetivo',r.category],['Frecuencia',isNum(r.freq)&&r.freq!==''?r.freq+' por semana':''],['Fase actual',ctx.phase||''],['Duración',isNum(r.duration)&&r.duration!==''?r.duration+' min':''],['Para',r.target],['Semana',wk?(wk.before?`Empieza el ${fdy(r.start)}`:`${wk.i+1} de ${wk.W.length}${wk.after?' (terminó la progresión)':''}`):'']].filter(x=>x[1]);
  const rx=(x,i)=>{const p=rxOf(r,x,wk&&!wk.before?wk:null);const kg=p.pct&&rm[i]?r25(rm[i]*p.pct/100):null;return {...p,kg}};
  const loadTxt=p=>[p.load,p.kg?'→ '+kgTxt(p.kg)+' kg':''].filter(Boolean).join(' ');
- return `<div class="sh-head"><img src="logo.png" alt="Escudo del club"><div style="min-width:0"><div class="sh-club">${esc(r.club||club.name||'Cuerpo técnico')}</div><div class="eyebrow">${r.kind==='Gimnasio'||isGym(r)?'Rutina de gimnasio':'Rutina'+(r.category?' · '+esc(r.category):'')}</div></div></div>
+ return `<div class="sh-head"><img src="logo.png" ${okMedia(r.logo||club.logo)?`data-logo="${r.logo||club.logo}"`:''} alt="Escudo del club"><div style="min-width:0"><div class="sh-club">${esc(r.club||club.short||club.name||'Cuerpo técnico')}</div><div class="eyebrow">${r.kind==='Gimnasio'||isGym(r)?'Rutina de gimnasio':'Rutina'+(r.category?' · '+esc(r.category):'')}</div></div></div>
  <h1 class="sh-title">${esc(r.name)}</h1>
  ${meta.length?`<div class="sh-meta">${meta.map(m=>`<div><div class="k">${m[0]}</div><div class="v">${esc(m[1])}</div></div>`).join('')}</div>`:''}
  ${r.indications?`<div class="sh-sec"><h3>Indicaciones</h3><div style="white-space:pre-wrap">${esc(r.indications)}</div></div>`:''}
@@ -2362,7 +2407,7 @@ function syncPlink(p){
  let t=p.linkId;
  if(!t){t=randId(20);p.linkId=t;const body={...p};delete body.id;setDoc(doc(db,'players',p.id),body).catch(()=>{})}
  const routines=plRoutines(p);
- setDoc(doc(db,'plinks',t),{player:p.id,name:p.name||'',club:club.name||'',routines,next:plNext(p),updatedAt:new Date().toISOString()}).catch(()=>{});
+ setDoc(doc(db,'plinks',t),{player:p.id,name:p.name||'',club:club.short||club.name||'',logo:okMedia(club.logo)?club.logo:'',routines,next:plNext(p),updatedAt:new Date().toISOString()}).catch(()=>{});
  return t;
 }
 function openLinks(pid){
@@ -2502,6 +2547,12 @@ document.addEventListener('click',e=>{
  else if(a==='wremind')openWellRemind();
  else if(a==='gymguide')openGymGuide();
  else if(a==='tsheet')openTestSheet();
+ else if(a==='backup')backup(b.dataset.from,b.dataset.to);
+ else if(a==='lkreset'){$('#lk_color').value='#163C84'}
+ else if(a==='stadd'){$('#stList').insertAdjacentHTML('beforeend',stRow({}))}
+ else if(a==='stdel'){b.closest('.st-row').remove()}
+ else if(a==='seasnew'){if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='¿Seguro? Tocá de nuevo';setTimeout(()=>{b.classList.remove('armed');b.textContent='Empezar temporada nueva'},4000);return}const cur=club.season||{};const st=seasonStart();const hist=[...(Array.isArray(club.seasons)?club.seasons:[]),{name:cur.name||'Temporada '+st.slice(0,4),start:st,end:addDays(today(),-1)}];saveClub({seasons:hist,season:{name:'',start:today(),end:''}},'Temporada nueva desde hoy. La anterior quedó guardada abajo.');document.activeElement&&document.activeElement.blur();render()}
+ else if(a==='waone'){e.preventDefault();const t=($('#wa_staff')||{}).value||'';const w=window.open(waHref(t,b.dataset.ph),'_blank','noopener');if(!w)location.href=waHref(t,b.dataset.ph)}
  else if(a==='mview'){if(e.target.closest('.acts'))return;openMatch(b.dataset.id)}
  else if(a==='mtsheet'){e.stopPropagation();openMatchSheet(b.dataset.id)}
  else if(a==='mconv'){e.stopPropagation();openConv(b.dataset.id)}
@@ -2612,6 +2663,7 @@ document.addEventListener('change',e=>{
  if(e.target.name==='testview'){testView=e.target.value;render()}
  if(e.target.name==='injview'){injView=e.target.value;render()}
  if(e.target.name==='mview'){mView=e.target.value;render()}
+ if(e.target.dataset&&e.target.dataset.alert){const off=new Set(club.alertsOff||[]);if(e.target.checked)off.delete(e.target.dataset.alert);else off.add(e.target.dataset.alert);saveClub({alertsOff:[...off]})}
  if(e.target.id==='yLimit'){club={...club,yellowLimit:+e.target.value};setDoc(doc(db,'config','club'),{...club}).catch(()=>{});render()}
  if(MS&&e.target.closest&&e.target.closest('#msFrm')){msInput(e.target);if(e.target.dataset.subk==='out'||e.target.dataset.subk==='in')renderMatchSheet()}
  if(e.target.id==='cmpA'){cmpA=e.target.value;render()}
@@ -2666,6 +2718,10 @@ document.addEventListener('submit',e=>{
  if(id==='rpeFrm'){e.preventDefault();return sendCheckin('rpe')}
  if(id==='bajaFrm'){e.preventDefault();doBaja(e.target);return}
  if(id==='sqFrm'){e.preventDefault();saveSquads();return}
+ if(id==='lookFrm'){e.preventDefault();const lg=$('#lookFrm .imgfld input[type=hidden]').value;saveClub({short:$('#lk_short').value.trim(),color:$('#lk_color').value,logo:okMedia(lg)?lg:''},'Guardado');lookKey='';applyClubLook();return}
+ if(id==='seasFrm'){e.preventDefault();const st=$('#ss_start').value,en=$('#ss_end').value;if(st&&en&&en<st){toast('La fecha de fin es anterior al inicio.');return}saveClub({season:{name:$('#ss_name').value.trim(),start:st,end:en}},'Temporada guardada');document.activeElement&&document.activeElement.blur();render();return}
+ if(id==='genFrm'){e.preventDefault();const days=[...document.querySelectorAll('[data-genday]:checked')].map(c=>+c.value);const td={};document.querySelectorAll('[data-tcat]').forEach(i=>{const v=+i.value;if(v>0)td[i.dataset.tcat]=v*7});club={...club,guide:{...gset(),trainDays:days.length?days:gset().trainDays,time:$('#gen_time').value||gset().time}};saveClub({yellowLimit:+$('#gen_y').value,utilPhone:String($('#gen_util').value||'').replace(/[^\d]/g,''),testDays:td},'Ajustes guardados');return}
+ if(id==='staffFrm'){e.preventDefault();const L=[...document.querySelectorAll('#stList .st-row')].map(r=>({name:r.querySelector('[data-st=name]').value.trim(),role:r.querySelector('[data-st=role]').value.trim(),phone:r.querySelector('[data-st=phone]').value.trim()})).filter(x=>x.name);saveClub({staff:L},'Contactos guardados');return}
  if(id==='clubFrm'){e.preventDefault();const name=$('#clubIn').value.trim();if(!name){toast('Escribí el nombre del equipo.');return}
   document.activeElement&&document.activeElement.blur();
   setDoc(doc(db,'config','club'),{...club,name,editBy:me.uid,editAt:new Date().toISOString()}).catch(err=>toast(errMsg(err)));toast('Nombre del equipo actualizado')}
