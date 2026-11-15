@@ -598,3 +598,46 @@ export const SHORT_PRE={
   ['Semana 3','La de más volumen. Último bloque fuerte de resistencia aeróbica.'],
   ['Semana 4','Específica: intensidad alta, modelo de juego y amistoso.'],
   ['Semana 5','Ajuste: baja el volumen, se mantiene la intensidad y se repiten las evaluaciones. Amistoso.']]};
+
+/* Rutinas de campo listas para copiar: prevención y readaptación (con ejercicios de la biblioteca) */
+const pe=(name,sets,reps,notes='',rest='',block='')=>({name,sets,reps,load:'',rest,notes,block,prog:'',video:'',img:''});
+export const PREV=[
+ {name:'Prevención · Isquiotibiales',category:'Prevención',duration:15,freq:2,target:'Todo el plantel',indications:'Después de la entrada en calor, lejos del partido (MD-4 o MD-3). Calidad antes que cantidad: si aparece dolor, se corta.',exercises:[
+  pe('Puente de glúteo a una pierna','2','10 por lado','Cadera alta, sin arquear la espalda.','30 s'),
+  pe('Peso muerto rumano a una pierna','2','8 por lado','Sin carga o con mancuerna liviana. Cadera hacia atrás, espalda larga.','30 s'),
+  pe('Curl de isquiotibiales con deslizador','2','8','Cadera arriba y bajar lento.','45 s'),
+  pe('Nórdicos','2–3','4–6','Frenar lo más abajo posible. Empezar con pocas repeticiones y subir de a poco.','60 s'),
+  pe('Progresiones de 30–40 m','3','1','Al 80–90 %, relajado, volviendo caminando.')]},
+ {name:'Prevención · Aductores',category:'Prevención',duration:12,freq:2,target:'Todo el plantel',indications:'Después de la entrada en calor. Progresar la palanca de la plancha (rodilla → pie) cuando no haya molestias.',exercises:[
+  pe('Apretar una pelota entre las rodillas (isométrico)','3','10 s','Acostado, rodillas flexionadas. Fuerte pero sin dolor.','20 s'),
+  pe('Plancha lateral de aductor con rodilla apoyada','2','6–8 s por lado','La pierna de arriba sostiene el cuerpo. Cadera alineada.','30 s'),
+  pe('Sentadilla lateral','2','8 por lado','Cadera atrás, la otra pierna estirada.','30 s'),
+  pe('Desplazamiento lateral','3','10 m por lado','Bajo, sin cruzar los pies.')]},
+ {name:'Prevención · Tobillo y pantorrilla',category:'Prevención',duration:12,freq:2,target:'Todo el plantel',indications:'En la entrada en calor. Sirve también como vuelta después de un esguince leve, cuando ya no hay dolor.',exercises:[
+  pe('Movilidad de tobillo (rodilla a la pared)','2','10 por lado','Talón apoyado.'),
+  pe('Elevación de talones a una pierna','3','12 por lado','Subir rápido, bajar en 3 segundos.','30 s'),
+  pe('Equilibrio a una pierna con ojos cerrados','3','20 s por lado','Si sale fácil, sobre una superficie inestable.'),
+  pe('Rebotes de tobillo (pogos)','3','15','Rodillas casi rectas, poco tiempo de contacto.','45 s'),
+  pe('Aterrizaje a una pierna','2','5 por lado','Caer suave y quedarse quieto 2 segundos.','30 s')]},
+ {name:'Prevención · Core y cadera',category:'Prevención',duration:12,freq:2,target:'Todo el plantel',indications:'Al final de la entrada en calor o en la vuelta a la calma.',exercises:[
+  pe('Plancha frontal','3','30 s','Glúteos apretados, sin hundir la cadera.','20 s'),
+  pe('Plancha lateral','2','20 s por lado','','20 s'),
+  pe('Bicho muerto','2','8 por lado','Zona lumbar pegada al piso.'),
+  pe('Press Pallof','2','10 por lado','Con banda. Que el tronco no gire.'),
+  pe('Caminata lateral con banda','2','10 m por lado','Banda sobre las rodillas, pasos cortos.')]},
+ {name:'Readaptación · Isquiotibiales por fases',category:'Readaptación',duration:40,freq:4,target:'Lesionados de isquiotibiales',indications:'Siempre con el visto bueno del médico o kinesiólogo. Se pasa de fase cuando se cumple el criterio, no por los días. Si aparece dolor, se vuelve a la fase anterior.',
+  phases:[{name:'Fase 1',criteria:'Camina normal y contrae el músculo sin dolor.'},{name:'Fase 2',criteria:'Puente a una pierna parecido al de la otra pierna y trote sin dolor.'},{name:'Fase 3',criteria:'Corre al 80–90 % y hace nórdicos sin molestias.'},{name:'Fase 4',criteria:'Sprint al máximo y cambios de dirección sin dolor. Alta médica.'}],
+  exercises:[
+  pe('Puente de glúteo a dos piernas (isométrico)','3','20–30 s','Sin dolor. Subir la intensidad de a poco.','30 s','Fase 1'),
+  pe('Bisagra de cadera con bastón','2','10','Movimiento sin carga.','','Fase 1'),
+  pe('Bicicleta o caminata rápida','1','10 min','Sin dolor.','','Fase 1'),
+  pe('Puente de glúteo a una pierna','3','10','','45 s','Fase 2'),
+  pe('Peso muerto rumano a una pierna','3','8','Liviano, controlado.','45 s','Fase 2'),
+  pe('Trote progresivo','4','2 min','Al 50–60 %.','1 min','Fase 2'),
+  pe('Curl de isquiotibiales con deslizador','3','8','Bajar lento.','60 s','Fase 3'),
+  pe('Nórdicos','3','4','Rango corto al principio.','90 s','Fase 3'),
+  pe('Progresiones de 30–40 m','4–6','1','Al 70 → 90 %.','caminando','Fase 3'),
+  pe('Sprint lanzado (20 + 20 m)','4','1','Al máximo.','2 min','Fase 4'),
+  pe('5-0-5','4','1 por lado','Cambios de dirección al máximo.','90 s','Fase 4'),
+  pe('Entrenamiento con el grupo sin contacto, después con contacto','','','Primero parte del entrenamiento y después completo.','','Fase 4')]}
+];
