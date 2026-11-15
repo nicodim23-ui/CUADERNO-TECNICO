@@ -432,6 +432,7 @@ function pendings(NUM){
   if(wl.length)out.push({txt:`${wl.length} ${plural(wl.length,'alerta','alertas')} de bienestar hoy`,names:wl,act:'tab',k:'well',btn:'Ir a Bienestar'});
   if(up.length)out.push({txt:`${up.length} ${plural(up.length,'jugador subió','jugadores subieron')} la carga de golpe esta semana`,names:up,act:'tab',k:'well',btn:'Ir a Bienestar'});}
  {const late=S.routines.map(r=>({r,d:rDue(r)})).filter(x=>x.d&&x.d.late&&x.d.last);if(late.length)out.push({txt:`${late.length} ${plural(late.length,'rutina','rutinas')} sin hacer hace rato`,names:late.map(x=>`${x.r.name} (hace ${x.d.d} días, ${x.r.freq} por semana)`),act:'tab',k:'routines',btn:'Ir a Rutinas'});}
+ {const due=testsCatState().filter(x=>x.last&&x.due);if(due.length)out.push({txt:`Toca evaluar: ${due.map(x=>x.cat.toLowerCase()).join(', ')}`,names:due.map(x=>`${x.cat}: última el ${fd(x.last)}`),act:'tab',k:'tests',btn:'Ir a Tests'});}
  const apt=sortedPlayers().filter(p=>p.apto&&daysBetween(t,p.apto)<=15);
  if(apt.length)out.push({txt:`${apt.length} ${plural(apt.length,'apto médico vencido o por vencer','aptos médicos vencidos o por vencer')}`,names:apt.map(p=>`${p.name} (${daysBetween(t,p.apto)<0?'venció':'vence'} ${fd(p.apto)})`),act:'tab',k:'players',btn:'Ir a Plantel'});
  const noIft=sortedPlayers().filter(p=>!isGK(p)&&!lastTest(p.id,['30-15 IFT','30-15']));
@@ -534,19 +535,104 @@ function vSessions(){
  if(!S.sessions.length)return h+empty('Sin sesiones cargadas','Planificá la sesión con objetivos, materiales y tareas. El día del entrenamiento la proyectás en pantalla grande y después tomás asistencia.','sessions','Crear sesión');
  return h+`<div class="pl-ctl"><input class="flt" id="sesQ" type="search" placeholder="Buscar por tipo, objetivo, tarea o fecha" value="${esc(sesQ)}" aria-label="Buscar sesiones" autocomplete="off"></div><div id="sesList" style="display:grid;gap:18px">${sesLists()}</div>`;
 }
+/* ---------- tests: referencias, unidades y categorías ---------- */
+// [patrón, unidad, menor es mejor, categoría, umbrales bajo|medio|bueno (orientativos, fútbol amateur adulto)]
+const TMETA=[
+ [/^peso\b/,'kg',null,'Composición',null],[/talla/,'cm',null,'Composición',null],[/pliegues/,'mm',true,'Composición',[70,55,45]],[/grasa/,'%',true,'Composición',[14,12,9]],
+ [/sentadilla|trap bar/,'kg',false,'Fuerza',null],[/hip thrust/,'kg',false,'Fuerza',null],[/nordic|n[oó]rdic/,'rep',false,'Fuerza',null],[/aductor/,'mmHg',false,'Fuerza',null],
+ [/^cmj/,'cm',false,'Saltos',[32,38,43]],[/^sj/,'cm',false,'Saltos',[30,36,41]],[/una pierna/,'cm',false,'Saltos',null],[/salto horizontal/,'cm',false,'Saltos',[210,230,250]],
+ [/sprint 10/,'s',true,'Velocidad',[1.9,1.8,1.72]],[/sprint 20/,'s',true,'Velocidad',[3.2,3.05,2.95]],[/sprint 30/,'s',true,'Velocidad',[4.4,4.2,4.05]],[/velocidad m[aá]x/,'km/h',false,'Velocidad',[28,31,33]],[/5-0-5|505/,'s',true,'Velocidad',[2.5,2.4,2.3]],[/t-test/,'s',true,'Velocidad',[10.5,10,9.5]],
+ [/30-15/,'km/h',false,'Resistencia',[18,19,20]],[/^vam/,'km/h',false,'Resistencia',[15,16,17]],[/cooper/,'m',false,'Resistencia',[2800,3000,3200]],[/yo-yo ir1/,'m',false,'Resistencia',[1600,2000,2400]],[/yo-yo ir2/,'m',false,'Resistencia',[600,800,1000]],[/rsa/,'s',true,'Resistencia',[4.6,4.45,4.3]],
+ [/tobillo|rodilla a la pared/,'cm',false,'Movilidad',[9,10,12]]];
+const tmeta=n=>{const x=noAcc(n).trim();const m=TMETA.find(r=>r[0].test(x));return m?{unit:m[1],low:m[2],cat:m[3],b:m[4]}:null};
+const tLow=(name,unit)=>{const m=tmeta(name);if(m&&m.low!=null)return m.low;return unit==='s'||/sprint|agilidad|grasa|rsa|pliegue/i.test(name||'')};
+const BANDS=[['Bajo','warn'],['Medio','amber'],['Bueno','ok'],['Muy bueno','ok']];
+function tBand(name,v){const m=tmeta(name);if(!m||!m.b||!isNum(v))return null;const x=+v,[b1,b2,b3]=m.b;let i;if(m.low)i=x>b1?0:x>b2?1:x>b3?2:3;else i=x<b1?0:x<b2?1:x<b3?2:3;return BANDS[i]}
+const bandPill=(name,v)=>{const b=tBand(name,v);return b?`<span class="pill ${b[1]} tb">${b[0]}</span>`:''};
+const TCAT_DAYS={Composición:49,Fuerza:56,Saltos:7,Velocidad:49,Resistencia:56,Movilidad:84};
+const TBAT=[['Pretemporada',['Peso','CMJ','Sprint 10 m','Sprint 30 m','5-0-5','30-15 IFT']],['Control semanal',['CMJ','Aductores (apretar)']],['Velocidad',['Sprint 10 m','Sprint 30 m','Velocidad máxima','5-0-5']],['Composición',['Peso','Suma de 6 pliegues','% grasa']],['Fuerza',['Sentadilla (máximo estimado)','Hip thrust (máximo estimado)','Nordic']]];
+const nf=v=>String(Math.round(v*100)/100).replace('.',',');
+function tSeries(pid,name){return S.tests.filter(t=>t.player===pid&&tnorm(t.test)===tnorm(name)&&isNum(t.value)).sort((a,b)=>a.date.localeCompare(b.date))}
+function spark(vals,low,W=90,H=26){if(vals.length<2)return '';const mn=Math.min(...vals),mx=Math.max(...vals);const xy=vals.map((v,i)=>[i*(W-6)/(vals.length-1)+3,mx>mn?(low?3+(v-mn)/(mx-mn)*(H-6):H-3-(v-mn)/(mx-mn)*(H-6)):H/2]);return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><polyline points="${xy.map(p=>p.join(',')).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2"/><circle cx="${xy[xy.length-1][0]}" cy="${xy[xy.length-1][1]}" r="2.5" fill="var(--accent)"/></svg>`}
+function deltaHTML(a,b,low){if(b==null)return '';const d=Math.round((a-b)*100)/100;if(!d)return '<span class="trend">=</span>';const good=low?d<0:d>0;return `<span class="trend ${good?'up':'down'}">${d>0?'+':''}${nf(d)}</span>`}
+const avg=L=>L.length?L.reduce((a,b)=>a+b,0)/L.length:null;
+let testView='ranking',cmpA='',cmpB='';
 function vTests(){
  const types=[...new Set(S.tests.map(t=>t.test).filter(Boolean))].sort();
  if(testFilter&&!types.includes(testFilter))testFilter='';
- let h=`<div class="bar"><div><h2>Tests y tiempos</h2><p>Mediciones físicas por jugador. Filtrá una prueba para ver el ranking.</p></div><div class="tools">${types.length?`<select class="flt" id="testFilter" aria-label="Filtrar prueba"><option value="">Todas las pruebas</option>${types.map(t=>`<option ${t===testFilter?'selected':''}>${esc(t)}</option>`).join('')}</select>`:''}${addBtn('tests','Medición')}</div></div>`;
- if(!S.tests.length)return h+empty('Sin mediciones','Cargá sprints, saltos, Yo-Yo o peso. Cada marca queda guardada con fecha para ver la evolución.','tests','Cargar medición');
- if(testFilter){
-  const rows=S.tests.filter(t=>t.test===testFilter);const latest={};[...rows].sort(byDateDesc).forEach(t=>{if(!latest[t.player])latest[t.player]=t});
-  const unit=rows[0]&&rows[0].unit;const lowBetter=unit==='s'||/sprint|agilidad|grasa|rsa/i.test(testFilter);
-  const rk=Object.values(latest).sort((a,b)=>lowBetter?a.value-b.value:b.value-a.value);
-  h+=`<div class="panel"><h3>Ranking · última marca <small>${lowBetter?'menor es mejor':'mayor es mejor'}</small></h3><div class="tablewrap" style="border:0;border-radius:0 0 12px 12px"><table><thead><tr><th>#</th><th>Jugador</th><th class="r">Marca</th><th>Fecha</th></tr></thead><tbody>${rk.map((t,i)=>`<tr><td><span class="rk">${i+1}</span></td><td>${esc(plName(t.player))}</td><td class="r num">${esc(t.value)} ${esc(t.unit||'')}</td><td class="num">${fdy(t.date)}</td></tr>`).join('')}</tbody></table></div></div>`;
- }
+ let h=`<div class="bar"><div><h2>Tests y tiempos</h2><p>Mediciones físicas por jugador. Las referencias (bajo, medio, bueno, muy bueno) son orientativas para fútbol amateur adulto.</p></div><div class="tools"><button class="btn primary" type="button" data-act="tsheet">Cargar planilla</button>${addBtn('tests','Medición')}${S.tests.length?'<button class="btn" type="button" data-act="txls">Excel</button>':''}</div></div>`;
+ if(!S.tests.length)return h+empty('Sin mediciones','Con “Cargar planilla” elegís una o varias pruebas y anotás las marcas de todo el plantel de corrido. Cada marca queda guardada con fecha para ver la evolución.','tests','Cargar medición');
+ h+=testsDue();
+ h+=`<div class="pl-ctl lib-ctl"><select class="flt" id="testFilter" aria-label="Prueba"><option value="">Todas las pruebas</option>${types.map(t=>`<option ${t===testFilter?'selected':''}>${esc(t)}</option>`).join('')}</select>${testFilter?`<div class="seg2"><label><input type="radio" name="testview" value="ranking" ${testView==='ranking'?'checked':''}><span>Ranking</span></label><label><input type="radio" name="testview" value="cmp" ${testView==='cmp'?'checked':''}><span>Comparar evaluaciones</span></label></div>`:''}</div>`;
+ if(testFilter)h+=testView==='cmp'?testCompare(testFilter):testRanking(testFilter);
  const list=S.tests.filter(t=>!testFilter||t.test===testFilter).sort(byDateDesc);
- return h+`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Jugador</th><th>Prueba</th><th class="r">Marca</th><th>Notas</th><th>Cargó</th><th></th></tr></thead><tbody>${list.map(t=>`<tr><td class="num">${fdy(t.date)}</td><td>${esc(plName(t.player))}</td><td>${esc(t.test)}</td><td class="r num">${esc(t.value)} ${esc(t.unit||'')}</td><td style="white-space:normal;min-width:120px">${esc(t.notes||'')}</td><td style="color:var(--muted)">${esc(pname(t.editBy||t.by))}</td><td>${rowActs('tests',t.id)}</td></tr>`).join('')}</tbody></table></div>`;
+ return h+`<h3 class="g-h">Todas las mediciones <small class="g-sub" style="font-family:var(--f-body);text-transform:none;letter-spacing:0">${list.length}</small></h3><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Jugador</th><th>Prueba</th><th class="r">Marca</th><th></th><th>Notas</th><th>Cargó</th><th></th></tr></thead><tbody>${list.slice(0,200).map(t=>`<tr><td class="num">${fdy(t.date)}</td><td><button class="linkbtn" type="button" data-act="tcard" data-id="${t.player}">${esc(plName(t.player))}</button></td><td>${esc(t.test)}</td><td class="r num">${esc(String(t.value).replace('.',','))} ${esc(t.unit||'')}</td><td>${bandPill(t.test,t.value)}</td><td style="white-space:normal;min-width:120px">${esc(t.notes||'')}</td><td style="color:var(--muted)">${esc(pname(t.editBy||t.by))}</td><td>${rowActs('tests',t.id)}</td></tr>`).join('')}</tbody></table></div>${list.length>200?'<p class="g-note">Se muestran las 200 más recientes. El Excel tiene todas.</p>':''}`;
+}
+function testRanking(name){
+ const rows=S.tests.filter(t=>t.test===name&&isNum(t.value)&&pl(t.player));const unit=(rows[0]||{}).unit||'';const low=tLow(name,unit);
+ const latest={};[...rows].sort(byDateDesc).forEach(t=>{if(!latest[t.player])latest[t.player]=t});const L=Object.values(latest);
+ const grp=avg(L.map(t=>+t.value));const byLine={};L.forEach(t=>{const k=lineOf(pl(t.player));(byLine[k]=byLine[k]||[]).push(+t.value)});
+ const rk=L.sort((a,b)=>low?a.value-b.value:b.value-a.value);
+ const worse=(v,ref)=>ref!=null&&(low?v>ref:v<ref);
+ return `<div class="stats"><div class="stat"><div class="k">Promedio del grupo</div><div class="v">${grp!=null?nf(grp):'–'}</div><div class="s">${esc(unit)} · ${L.length} jugadores</div></div>${Object.entries(byLine).filter(([k])=>+k<4).map(([k,v])=>`<div class="stat"><div class="k">${LINES[k]}</div><div class="v">${nf(avg(v))}</div><div class="s">${v.length} jugador${v.length>1?'es':''}</div></div>`).join('')}</div>
+ <div class="panel"><h3>Ranking · última marca <small>${low?'menor es mejor':'mayor es mejor'}</small></h3><div class="tablewrap" style="border:0;border-radius:0 0 12px 12px"><table><thead><tr><th>#</th><th>Jugador</th><th class="r">Marca</th><th>Nivel</th><th class="r">Cambio</th><th>Evolución</th><th>Fecha</th></tr></thead><tbody>${rk.map((t,i)=>{const p=pl(t.player);const ser=tSeries(t.player,name);const prev=ser.length>1?+ser[ser.length-2].value:null;const la=avg(byLine[lineOf(p)]||[]);
+  return `<tr><td><span class="rk">${i+1}</span></td><td><button class="linkbtn" type="button" data-act="tcard" data-id="${t.player}">${esc(p.name)}</button>${worse(+t.value,la)&&(byLine[lineOf(p)]||[]).length>2?`<div class="g-sub">Debajo del promedio de ${LINES[lineOf(p)].toLowerCase()}</div>`:''}</td><td class="r num"><b>${nf(+t.value)}</b> ${esc(t.unit||'')}</td><td>${bandPill(name,t.value)}</td><td class="r">${deltaHTML(+t.value,prev,low)}</td><td>${spark(ser.map(x=>+x.value),low)}</td><td class="num">${fdy(t.date)}</td></tr>`}).join('')}</tbody></table></div></div>`;
+}
+function testCompare(name){
+ const rows=S.tests.filter(t=>t.test===name&&isNum(t.value)&&pl(t.player));const dates=[...new Set(rows.map(t=>t.date))].sort();const low=tLow(name,(rows[0]||{}).unit);
+ if(dates.length<2)return `<div class="empty"><strong>Hace falta una segunda evaluación</strong><p>Cuando haya marcas de ${esc(name)} en dos fechas distintas, acá ves cuánto cambió cada jugador.</p></div>`;
+ if(!dates.includes(cmpA))cmpA=dates[0];if(!dates.includes(cmpB)||cmpB===cmpA)cmpB=dates[dates.length-1];
+ const at=(pid,d)=>{const L=rows.filter(t=>t.player===pid&&t.date===d);return L.length?+L[L.length-1].value:null};
+ const ps=sortedPlayers().map(p=>({p,a:at(p.id,cmpA),b:at(p.id,cmpB)})).filter(x=>x.a!=null||x.b!=null);const both=ps.filter(x=>x.a!=null&&x.b!=null);
+ const better=both.filter(x=>low?x.b<x.a:x.b>x.a).length,worse_=both.filter(x=>low?x.b>x.a:x.b<x.a).length;const ga=avg(both.map(x=>x.a)),gb=avg(both.map(x=>x.b));
+ const opt=v=>dates.map(d=>`<option value="${d}" ${d===v?'selected':''}>${fdy(d)}</option>`).join('');
+ return `<div class="g-ctl"><div class="fld"><label for="cmpA">Evaluación A</label><select class="flt" id="cmpA">${opt(cmpA)}</select></div><div class="fld"><label for="cmpB">Evaluación B</label><select class="flt" id="cmpB">${opt(cmpB)}</select></div></div>
+ <div class="stats"><div class="stat"><div class="k">Promedio A → B</div><div class="v">${ga!=null?nf(ga)+' → '+nf(gb):'–'}</div><div class="s">${both.length} con las dos marcas</div></div><div class="stat"><div class="k">Mejoraron</div><div class="v ok">${better}</div><div class="s">de ${both.length}</div></div><div class="stat"><div class="k">Empeoraron</div><div class="v ${worse_?'warn':''}">${worse_}</div><div class="s">de ${both.length}</div></div></div>
+ <div class="tablewrap"><table><thead><tr><th>Jugador</th><th class="r">${fd(cmpA)}</th><th class="r">${fd(cmpB)}</th><th class="r">Cambio</th><th class="r">%</th></tr></thead><tbody>${ps.sort((x,y)=>{const dx=x.a!=null&&x.b!=null?(x.b-x.a)*(low?-1:1):-1e9,dy=y.a!=null&&y.b!=null?(y.b-y.a)*(low?-1:1):-1e9;return dy-dx}).map(x=>`<tr><td>${esc(x.p.name)}</td><td class="r num">${x.a!=null?nf(x.a):'–'}</td><td class="r num">${x.b!=null?nf(x.b):'–'}</td><td class="r">${x.a!=null&&x.b!=null?deltaHTML(x.b,x.a,low):''}</td><td class="r num">${x.a&&x.b!=null?(x.b>x.a?'+':'')+nf((x.b-x.a)/x.a*100)+' %':''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+/* próxima evaluación */
+function testsCatState(){const t=today();return Object.keys(TCAT_DAYS).map(cat=>{const L=S.tests.filter(x=>pl(x.player)&&(tmeta(x.test)||{}).cat===cat);if(!L.length)return {cat,last:null};const last=L.map(x=>x.date).sort().pop();const d=daysBetween(last,t);return {cat,last,d,due:d>TCAT_DAYS[cat],every:TCAT_DAYS[cat]}})}
+function testsDue(){const st=testsCatState();if(!st.some(x=>x.last))return '';
+ return `<div class="panel"><h3>Próximas evaluaciones <small>según la guía</small></h3><div class="body"><div class="tdue">${st.map(x=>`<div class="tdue-i"><b>${x.cat}</b><span class="g-sub">${x.last?`última ${fd(x.last)} · ${x.every===7?'todas las semanas':'cada '+Math.round(x.every/7)+' semanas'}`:'nunca evaluado'}</span>${x.last?`<span class="pill ${x.due?'amber':'ok'}">${x.due?'Toca evaluar':'Al día'}</span>`:'<span class="pill">—</span>'}</div>`).join('')}</div></div></div>`}
+/* planilla de carga */
+let TS=null;
+function openTestSheet(){
+ TS=TS&&TS.open?TS:{date:today(),tests:['CMJ'],vals:{},open:true};renderTestSheet();showModal();
+}
+function renderTestSheet(){
+ const ps=sortedPlayers();const known=[...new Set([...TEST_NAMES,...S.tests.map(t=>t.test)])];
+ $('#mTitle').textContent='Planilla de evaluación';
+ $('#mBody').innerHTML=`<form class="form" id="tsFrm" novalidate>
+ <div class="fld"><label for="ts_date">Fecha</label><input id="ts_date" type="date" value="${TS.date}" max="${today()}"></div>
+ <div class="fld"><label for="ts_add">Sumar una prueba</label><select id="ts_add"><option value="">Elegí…</option>${known.filter(n=>!TS.tests.includes(n)).map(n=>`<option>${esc(n)}</option>`).join('')}</select></div>
+ <div class="fld full"><span class="lb">Baterías</span><div class="cx-days">${TBAT.map(([n,L])=>`<button type="button" class="chip" data-act="tsbat" data-k="${esc(n)}"><b>${esc(n)}</b>${L.length} pruebas</button>`).join('')}</div></div>
+ <div class="fld full"><span class="lb">Pruebas de esta planilla</span><div class="cx-days">${TS.tests.map(n=>`<span class="chip on">${esc(n)} <span class="g-sub">${esc((tmeta(n)||{}).unit||'')}</span> <button type="button" class="linkbtn" data-act="tsdel" data-k="${esc(n)}" aria-label="Sacar ${esc(n)}">✕</button></span>`).join('')||'<span class="g-sub">Elegí al menos una</span>'}</div></div>
+ <div class="fld full"><div class="tablewrap ts-grid"><table><thead><tr><th>Jugador</th>${TS.tests.map(n=>`<th>${esc(n)}<div class="g-sub">${esc((tmeta(n)||{}).unit||'')}</div></th>`).join('')}</tr></thead><tbody>${ps.map(p=>`<tr><td>${esc(p.name)}${availability(p.id)[0]!=='Disponible'?` <span class="pill ${availability(p.id)[1]}" style="font-size:10px">${availability(p.id)[0]}</span>`:''}</td>${TS.tests.map(n=>{const ser=tSeries(p.id,n);const last=ser[ser.length-1];const k=p.id+'|'+n;return `<td><input data-ts="${esc(k)}" type="text" inputmode="decimal" value="${esc(TS.vals[k]??'')}" placeholder="${last?nf(+last.value):''}" aria-label="${esc(p.name)} ${esc(n)}"></td>`}).join('')}</tr>`).join('')}</tbody></table></div><span class="hint">En gris, la última marca de cada uno. Podés dejar casilleros vacíos.</span></div>
+ <div class="formacts"><button type="button" class="btn" data-act="tsclose">Cancelar</button><button type="submit" class="btn primary">Guardar marcas</button></div></form>`;
+}
+function saveTestSheet(){
+ const date=$('#ts_date').value||today();const now=new Date().toISOString();let n=0,bad=0;
+ Object.entries(TS.vals).forEach(([k,v])=>{const [pid,name]=[k.slice(0,k.indexOf('|')),k.slice(k.indexOf('|')+1)];if(!TS.tests.includes(name)||!pl(pid))return;const x=parseFloat(String(v).replace(',','.'));if(String(v).trim()==='')return;if(isNaN(x)){bad++;return}
+  setDoc(doc(collection(db,'tests')),{date,player:pid,test:name,value:x,unit:(tmeta(name)||{}).unit||'',notes:'',by:me.uid,at:now}).catch(err=>toast(errMsg(err)));n++});
+ if(bad){toast(`Hay ${bad} marca${bad>1?'s':''} que no son números. Revisalas.`);return}
+ if(!n){toast('No anotaste ninguna marca.');return}
+ TS=null;closeModal();toast(`Se guardaron ${n} marca${n>1?'s':''}.`);
+}
+/* ficha de evaluación del jugador */
+function openTestCard(pid){
+ const p=pl(pid);if(!p)return;closeModal();const names=[...new Set(S.tests.filter(t=>t.player===pid).map(t=>t.test))];
+ const cats={};names.forEach(n=>{const c=(tmeta(n)||{}).cat||'Otras';(cats[c]=cats[c]||[]).push(n)});
+ const order=['Composición','Fuerza','Saltos','Velocidad','Resistencia','Movilidad','Otras'];
+ openDoc(sheetHead('Ficha de evaluación')+`<div class="sh-meta">${[['Jugador',p.name],['Puesto',p.position],['Edad',p.birth?String(Math.floor(daysBetween(p.birth,today())/365.25)):''],['Pruebas',String(names.length)]].filter(x=>x[1]).map(m=>`<div><div class="k">${m[0]}</div><div class="v">${esc(m[1])}</div></div>`).join('')}</div>`
+ +(names.length?order.filter(c=>cats[c]).map(c=>`<div class="sh-sec"><h3>${c}</h3><div class="tablewrap sh-table"><table><thead><tr><th>Prueba</th><th class="r">Última</th><th>Nivel</th><th class="r">Cambio</th><th class="r">Promedio del grupo</th><th>Evolución</th></tr></thead><tbody>${cats[c].sort().map(n=>{const ser=tSeries(pid,n);const a=ser[ser.length-1];if(!a)return '';const low=tLow(n,a.unit);const prev=ser.length>1?+ser[ser.length-2].value:null;const latest={};S.tests.filter(t=>t.test===n&&isNum(t.value)&&pl(t.player)).sort(byDateDesc).forEach(t=>{if(!latest[t.player])latest[t.player]=+t.value});const g=avg(Object.values(latest));
+  return `<tr><td><b>${esc(n)}</b><div class="g-sub">${fdy(a.date)}${ser.length>1?' · '+ser.length+' marcas':''}</div></td><td class="r num"><b>${nf(+a.value)}</b> ${esc(a.unit||'')}</td><td>${bandPill(n,a.value)}</td><td class="r">${deltaHTML(+a.value,prev,low)}</td><td class="r num">${g!=null?nf(g):''}</td><td>${spark(ser.map(x=>+x.value),low,110,30)}</td></tr>`}).join('')}</tbody></table></div></div>`).join(''):'<p>Todavía no tiene mediciones.</p>')
+ +`<p style="font-size:12px;color:var(--muted)">Niveles orientativos para fútbol amateur adulto. Cambio: diferencia con la marca anterior (verde si mejoró).</p>`,
+ `<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools"><button class="btn primary" type="button" data-act="print">Descargar PDF</button></div></div>`);
+}
+function testsXls(){
+ const L=S.tests.filter(t=>(!testFilter||t.test===testFilter)&&pl(t.player)).sort((a,b)=>a.date.localeCompare(b.date)||plName(a.player).localeCompare(plName(b.player)));const q=v=>{const x=String(v??'');return /[;"\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x};
+ const csv='﻿'+[['Fecha','Jugador','Puesto','Prueba','Marca','Unidad','Nivel','Notas'],...L.map(t=>[fdy(t.date),plName(t.player),(pl(t.player)||{}).position||'',t.test,String(t.value).replace('.',','),t.unit||'',(tBand(t.test,t.value)||[''])[0],t.notes||''])].map(r=>r.map(q).join(';')).join('\r\n');
+ try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=`tests-${today()}.csv`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}catch(_){toast('No se pudo descargar el archivo.')}
 }
 function vInjuries(){
  const h=`<div class="bar"><div><h2>Lesiones</h2><p>Seguimiento médico: días de baja, vuelta estimada y alta.</p></div><div class="tools"><select class="flt" id="injFilter" aria-label="Filtrar lesiones"><option value="activas" ${injFilter==='activas'?'selected':''}>Activas y en readaptación</option><option value="todas" ${injFilter==='todas'?'selected':''}>Todo el historial</option></select>${addBtn('injuries','Lesión')}</div></div>`;
@@ -655,7 +741,7 @@ function vPlayers(){
 }
 function testTrend(id){
  const by={};S.tests.filter(t=>t.player===id&&isNum(t.value)).forEach(t=>{const k=tnorm(t.test);(by[k]=by[k]||[]).push(t)});
- return Object.values(by).map(list=>{list.sort(byDateDesc);const [a,b]=list;const low=a.unit==='s'||/sprint|505|t-test|velocidad 1|cod|tiempo/i.test(a.test||'');
+ return Object.values(by).map(list=>{list.sort(byDateDesc);const [a,b]=list;const low=tLow(a.test,a.unit);
   let tr='';if(b){const d=Math.round((+a.value-+b.value)*100)/100;const good=low?d<0:d>0;tr=d===0?`<span class="trend">= igual</span>`:`<span class="trend ${good?'up':'down'}">${good?'▲ mejoró':'▼ empeoró'} ${d>0?'+':''}${String(d).replace('.',',')}</span>`}
   return {a,tr,n:list.length}}).sort((x,y)=>(x.a.test||'').localeCompare(y.a.test||''));
 }
@@ -686,7 +772,7 @@ function openPlayer(id){
  <div class="det-sec"><h4>Bienestar últimos 14 días</h4>${wellGridPlayer(id)}</div>
  <div class="det-sec"><h4>Bienestar y RPE (lo carga el jugador)</h4>${(()=>{const L=S.checkins.filter(c=>c.player===id&&(c.kind==='well'||c.kind==='rpe')).sort(byDateDesc).slice(0,6);return L.length?`<div class="mini">${L.map(c=>c.kind==='well'?`<div><span>${fdy(c.date)} · Bienestar${c.painZone?' · dolor: '+esc(c.painZone):''}</span><span>${WELL.map(w=>`${w[1]} <b class="num">${c[w[0]]??'–'}</b>`).join(' · ')} · <b class="num">${wellTotal(c)} de 20</b></span></div>`:`<div><span>${fdy(c.date)} · ${esc(c.activity||'')}</span><span>RPE <b class="num">${esc(c.rpe)}</b>${isNum(c.minutes)?` · ${c.minutes} min · carga <b class="num">${Math.round(c.rpe*c.minutes)}</b>`:''}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Todavía no cargó nada. Mandale su link.</div>'})()}</div>
  <div class="det-sec"><h4>Gimnasio</h4>${gr.length?`<div style="margin-bottom:8px;font-size:14px">Rutinas asignadas: ${gr.map(r=>`<button class="linkbtn" type="button" data-act="rsheet" data-id="${r.id}">${esc(r.name)}</button>`).join(' · ')}</div>`:''}${gl.length?`<div class="mini">${gl.map(g=>{const r=S.routines.find(x=>x.id===g.routine);return `<div><span>${fdy(g.date)} · ${esc(r?r.name:(g.done||'Gimnasio').split('\n')[0])}</span><span class="num" style="color:var(--muted)">${[isNum(g.duration)?g.duration+' min':'',isNum(g.rpe)?'RPE '+g.rpe:''].filter(Boolean).join(' · ')}</span></div>`}).join('')}</div>`:'<div style="color:var(--muted)">Sin registros de gimnasio.</div>'}</div>
- <div class="det-sec"><h4>Tests · último resultado</h4>${TT.length?`<div class="mini">${TT.map(x=>`<div><span>${esc(x.a.test)} · <span class="num" style="color:var(--muted)">${fdy(x.a.date)}</span></span><span><b class="num">${esc(String(x.a.value).replace('.',','))} ${esc(x.a.unit||'')}</b> ${x.tr}</span></div>`).join('')}</div>${tests.length>TT.length?`<details class="miss"><summary>Ver todas las mediciones (${tests.length})</summary><div class="mini" style="margin-top:6px">${tests.map(t=>`<div><span>${esc(t.test)} · <span class="num" style="color:var(--muted)">${fdy(t.date)}</span></span><span class="num">${esc(t.value)} ${esc(t.unit||'')}</span></div>`).join('')}</div></details>`:''}`:'<div style="color:var(--muted)">Sin mediciones.</div>'}</div>
+ <div class="det-sec"><h4>Tests · último resultado</h4>${TT.length?`<div class="mini">${TT.map(x=>`<div><span>${esc(x.a.test)} · <span class="num" style="color:var(--muted)">${fdy(x.a.date)}</span></span><span><b class="num">${esc(String(x.a.value).replace('.',','))} ${esc(x.a.unit||'')}</b> ${bandPill(x.a.test,x.a.value)} ${x.tr} ${spark(tSeries(id,x.a.test).map(t=>+t.value),tLow(x.a.test,x.a.unit),60,20)}</span></div>`).join('')}</div><div style="margin-top:8px"><button class="btn sm" type="button" data-act="tcard" data-id="${id}">Ficha de evaluación (PDF)</button></div>${tests.length>TT.length?`<details class="miss"><summary>Ver todas las mediciones (${tests.length})</summary><div class="mini" style="margin-top:6px">${tests.map(t=>`<div><span>${esc(t.test)} · <span class="num" style="color:var(--muted)">${fdy(t.date)}</span></span><span class="num">${esc(t.value)} ${esc(t.unit||'')}</span></div>`).join('')}</div></details>`:''}`:'<div style="color:var(--muted)">Sin mediciones.</div>'}</div>
  <div class="det-sec"><h4>Lesiones (${inj.length})</h4>${inj.length?`<div class="mini">${inj.map(i=>`<div><span>${esc(i.zone||'')} ${i.kind?'· '+esc(i.kind):''} · <span class="num" style="color:var(--muted)">${fdy(i.date)}</span></span><span class="pill ${i.status==='Activa'?'warn':i.status==='Alta'?'ok':'amber'}">${esc(i.status||'')}</span></div>`).join('')}</div>`:'<div style="color:var(--muted)">Sin lesiones registradas.</div>'}</div>
  ${baja?`<div class="formacts"><button class="btn danger" type="button" data-act="del" data-col="players" data-id="${id}">Borrar definitivamente</button><button class="btn primary" type="button" data-act="preact" data-id="${id}">Reactivar</button></div>`
  :`<div class="formacts"><button class="btn" type="button" data-act="add" data-col="tests" data-pre="${id}">+ Test</button><button class="btn" type="button" data-act="add" data-col="injuries" data-pre="${id}">+ Lesión</button><button class="btn" type="button" data-act="add" data-col="gymlogs" data-pre="${id}">+ Gimnasio</button><button class="btn" type="button" data-act="plink" data-id="${id}">Link del jugador</button><button class="btn primary" type="button" data-act="edit" data-col="players" data-id="${id}">Editar ficha</button></div>
@@ -2223,6 +2309,12 @@ document.addEventListener('click',e=>{
  else if(a==='wday'){const v=+b.dataset.v;const d=wellDate||today();wellDate=v===0?today():addDays(d,v)>today()?today():addDays(d,v);render()}
  else if(a==='wremind')openWellRemind();
  else if(a==='gymguide')openGymGuide();
+ else if(a==='tsheet')openTestSheet();
+ else if(a==='tsbat'){const B=TBAT.find(x=>x[0]===b.dataset.k);if(B){B[1].forEach(n=>{if(!TS.tests.includes(n))TS.tests.push(n)});renderTestSheet()}}
+ else if(a==='tsdel'){TS.tests=TS.tests.filter(n=>n!==b.dataset.k);renderTestSheet()}
+ else if(a==='tsclose'){if(TS&&Object.values(TS.vals).some(v=>String(v).trim())&&!b.classList.contains('armed')){b.classList.add('armed');b.textContent='¿Salir sin guardar?';return}TS=null;closeModal()}
+ else if(a==='tcard'){e.stopPropagation();openTestCard(b.dataset.id)}
+ else if(a==='txls')testsXls();
  else if(a==='gprev'){const r=PREV[+b.dataset.i];if(!r||S.routines.some(q=>q.name===r.name))return;setDoc(doc(collection(db,'routines')),{...r,exercises:r.exercises.map(x=>({...x})),phases:(r.phases||[]).map(x=>({...x})),assigned:[],by:me.uid,at:new Date().toISOString()}).catch(err=>toast(errMsg(err)));toast('Rutina copiada a Rutinas');setTimeout(openGymGuide,80)}
  else if(a==='rdup'){const r=S.routines.find(x=>x.id===b.dataset.id);if(r){closeDoc();openForm(isGym(r)?'gymroutines':'routines',null,{copy:r.id})}}
  else if(a==='rutgym'){rutF='gym';tab='routines';render()}
@@ -2309,6 +2401,11 @@ document.addEventListener('change',e=>{
  if(e.target.matches&&e.target.matches('[data-reason]')){const r=e.target.closest('[data-row-att]');r.querySelector('[data-att]').value=e.target.value;attCount()}
  if(e.target.name==='attview'){attView=e.target.value;render()}
  if(e.target.name==='rutf'){rutF=e.target.value;render()}
+ if(e.target.name==='testview'){testView=e.target.value;render()}
+ if(e.target.id==='cmpA'){cmpA=e.target.value;render()}
+ if(e.target.id==='cmpB'){cmpB=e.target.value;render()}
+ if(e.target.id==='ts_date'&&TS){TS.date=e.target.value}
+ if(e.target.id==='ts_add'&&TS&&e.target.value){TS.tests.push(e.target.value);renderTestSheet()}
  if(e.target.id==='rutCat'){rutCat=e.target.value;render()}
  if(e.target.name==='wellview'){wellView=e.target.value;render()}
  if(e.target.id==='wellSpan'){wellSpan=+e.target.value;render()}
@@ -2321,6 +2418,8 @@ document.addEventListener('input',e=>{
  if(['rc_work','rc_pct','rc_rest','rc_try'].includes(id))rcInput(e.target);
  if(id.startsWith('ssg_')){SSGC[id.slice(4)]=e.target.value;const o=$('#ssgOut');if(o)o.innerHTML=ssgOutHTML()}
  if(id==='wa_txt'){const l=$('#waLink');if(l)l.href='https://wa.me/?text='+encodeURIComponent(e.target.value)}
+ if(e.target.dataset&&e.target.dataset.ts!==undefined&&TS){TS.vals[e.target.dataset.ts]=e.target.value}
+ if(id==='f_test'){const m=tmeta(e.target.value);const u=$('#f_unit');if(m&&u)u.value=m.unit}
  if(id==='rutQ'){rutQ=e.target.value;const l=$('#rutList');if(l){const tmp=document.createElement('div');tmp.innerHTML=vRoutines();l.replaceWith(tmp.querySelector('#rutList'))}}
  if(id==='libQ'){libQ=e.target.value;const l=$('#libList');if(l){const tmp=document.createElement('div');tmp.innerHTML=vLib();const nl=tmp.querySelector('#libList');l.replaceWith(nl);hydrateMedia(nl)}}
  if(id==='sesQ'){sesQ=e.target.value;const l=$('#sesList');if(l)l.innerHTML=sesLists()}
@@ -2335,6 +2434,7 @@ document.addEventListener('submit',e=>{
  if(id==='authFrm')return onAuthForm(e);
  if(id==='frm')return submitForm(e);
  if(id==='attFrm')return saveAtt(e);
+ if(id==='tsFrm'){e.preventDefault();return saveTestSheet()}
  if(id==='ltrFrm'){e.preventDefault();return saveLibToRoutine(e.target)}
  if(id==='gymLogFrm')return sendGymLog(e);
  if(id==='smFrm'){e.preventDefault();return saveModel(e.target)}
