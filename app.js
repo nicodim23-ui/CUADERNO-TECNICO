@@ -328,7 +328,13 @@ const SCHEMA={
   {k:'gf',l:'Goles a favor',t:'number',min:0,max:30},
   {k:'ga',l:'Goles en contra',t:'number',min:0,max:30},
   {k:'squad',l:'Convocados',t:'players',full:1},
-  {k:'notes',l:'Notas del partido',t:'textarea',full:1,ph:'Goleadores, cambios, observaciones'}]}
+  {t:'sec',l:'Convocatoria'},
+  {k:'meet',l:'Hora de citación',t:'time',hint:'Si la dejás vacía, se propone 1 h 30 antes.'},
+  {k:'place',l:'Lugar',t:'text',ph:'Cancha, dirección o punto de encuentro'},
+  {k:'bring',l:'Qué llevar',t:'text',full:1,ph:'Ropa de juego, canilleras y documento'},
+  {t:'sec',l:'Después del partido'},
+  {k:'rpe',l:'RPE promedio del partido',t:'number',min:1,max:10,step:'0.5',hint:'Para la carga de los que no cargaron su RPE. La planilla de cada jugador se carga con el botón Planilla.'},
+  {k:'notes',l:'Notas del partido',t:'textarea',full:1,ph:'Observaciones del cuerpo técnico'}]}
 };
 const TABS=[['resumen','Resumen'],['players','Plantel'],['plan','Planificación'],['guide','Guía'],['sessions','Sesiones'],['att','Asistencia'],['well','Bienestar'],['gym','Gimnasio'],['lib','Ejercicios'],['routines','Rutinas'],['tests','Tests'],['injuries','Lesiones'],['matches','Partidos']];
 const PARTS=['Entrada en calor','Parte principal','Vuelta a la calma'];
@@ -433,6 +439,10 @@ function pendings(NUM){
   if(up.length)out.push({txt:`${up.length} ${plural(up.length,'jugador subió','jugadores subieron')} la carga de golpe esta semana`,names:up,act:'tab',k:'well',btn:'Ir a Bienestar'});}
  {const late=S.routines.map(r=>({r,d:rDue(r)})).filter(x=>x.d&&x.d.late&&x.d.last);if(late.length)out.push({txt:`${late.length} ${plural(late.length,'rutina','rutinas')} sin hacer hace rato`,names:late.map(x=>`${x.r.name} (hace ${x.d.d} días, ${x.r.freq} por semana)`),act:'tab',k:'routines',btn:'Ir a Rutinas'});}
  {const due=testsCatState().filter(x=>x.last&&x.due);if(due.length)out.push({txt:`Toca evaluar: ${due.map(x=>x.cat.toLowerCase()).join(', ')}`,names:due.map(x=>`${x.cat}: última el ${fd(x.last)}`),act:'tab',k:'tests',btn:'Ir a Tests'});}
+ {const sp=[],nr=[];sortedPlayers().forEach(p=>{const y=suspInfo(p.id);if(y.susp)sp.push(`${p.name} (${y.susp.why})`);else if(y.near)nr.push(`${p.name} (${y.mod} amarillas)`)});
+  if(sp.length)out.push({txt:`${sp.length} ${plural(sp.length,'suspendido','suspendidos')} para el próximo partido`,names:sp,act:'tab',k:'matches',btn:'Ir a Partidos'});
+  if(nr.length)out.push({txt:`${nr.length} al límite de amarillas`,names:nr,act:'tab',k:'matches',btn:'Ir a Partidos'});
+  const miss=S.matches.filter(m=>hasRes(m)&&!m.sheet&&daysBetween(m.date,t)<=10);if(miss.length)out.push({txt:`Falta la planilla de ${miss.length} partido${miss.length>1?'s':''}`,names:miss.map(m=>`vs ${m.rival} (${fd(m.date)})`),act:'tab',k:'matches',btn:'Ir a Partidos'});}
  const apt=sortedPlayers().filter(p=>p.apto&&daysBetween(t,p.apto)<=15);
  if(apt.length)out.push({txt:`${apt.length} ${plural(apt.length,'apto médico vencido o por vencer','aptos médicos vencidos o por vencer')}`,names:apt.map(p=>`${p.name} (${daysBetween(t,p.apto)<0?'venció':'vence'} ${fd(p.apto)})`),act:'tab',k:'players',btn:'Ir a Plantel'});
  const noIft=sortedPlayers().filter(p=>!isGK(p)&&!lastTest(p.id,['30-15 IFT','30-15']));
@@ -733,18 +743,128 @@ function vRoutines(){
  ${late.length?`<div class="banner">Hace rato que no se hacen: ${late.map(x=>`<b>${esc(x.r.name)}</b> (${x.d.last?'hace '+x.d.d+' días':'nunca'})`).join(', ')}. Se cuentan las sesiones que tienen la rutina vinculada.</div>`:''}
  <div id="rutList">${L.length?`<div class="grid-cards">${L.map(rCard).join('')}</div>`:`<div class="empty"><strong>No hay rutinas con esos filtros</strong></div>`}</div>`;
 }
+/* ---------- partidos ---------- */
+let mView='lista',MS=null;
+const SP=[['corner','Córner'],['fk','Tiro libre'],['pen','Penal'],['throw','Lateral']];
+const SUB_WHY=['Táctico','Cansancio','Lesión','Molestia','Tarjeta'];
+const yLimit=()=>+(club.yellowLimit||5);
+const hasRes=m=>isNum(m.gf)&&isNum(m.ga);
+const mRes=m=>!hasRes(m)?null:+m.gf>+m.ga?['G','Ganado','ok']:+m.gf===+m.ga?['E','Empate','amber']:['P','Perdido','warn'];
+const seasonMatches=()=>S.matches.filter(m=>m.date>=seasonStart()).sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+const nextMatchAfter=d=>sortStart(S.matches.map(m=>({...m,start:m.date}))).find(m=>m.date>d);
+const sheetOf=(m,pid)=>m.sheet&&m.sheet[pid]||null;
+const sent=x=>x&&(x.r||+x.y>=2);
+function suspInfo(pid){const L=seasonMatches().filter(m=>m.date<=today()&&m.sheet);let acc=0,ev=null;
+ L.forEach(m=>{const x=sheetOf(m,pid);if(!x)return;if(sent(x)){ev={m,why:+x.y>=2?'doble amarilla':'roja'}}else if(+x.y>0){acc+=+x.y;if(acc%yLimit()===0)ev={m,why:`${yLimit()} amarillas`}}});
+ const lastPlayed=L[L.length-1];return {acc,mod:acc%yLimit(),near:acc%yLimit()===yLimit()-1,susp:ev&&lastPlayed&&ev.m.id===lastPlayed.id?ev:null}}
+function pStats(pid,L){const r={pj:0,tit:0,min:0,g:0,a:0,y:0,rd:0};L.forEach(m=>{const x=sheetOf(m,pid);if(!x)return;if(+x.min>0||x.st==='T'){r.pj++;if(x.st==='T')r.tit++}r.min+=+x.min||0;r.g+=+x.g||0;r.a+=+x.a||0;r.y+=Math.min(+x.y||0,2);if(sent(x))r.rd++});return r}
+function matchMinutes(){const dur=+MS.dur||90;const out={};Object.entries(MS.rows).forEach(([pid,x])=>{let st=x.st==='T'?0:null;const si=MS.subs.find(z=>z.in===pid&&isNum(z.min));if(st==null&&si)st=+si.min;if(st==null){out[pid]=0;return}const so=MS.subs.find(z=>z.out===pid&&isNum(z.min));const end=so?+so.min:dur;out[pid]=Math.max(0,Math.min(dur,end)-st)});return out}
 function vMatches(){
- let h=`<div class="bar"><div><h2>Partidos</h2><p>Fixture, resultados y convocados.</p></div><div class="tools">${addBtn('matches','Partido')}</div></div>`;
- if(!S.matches.length)return h+empty('Sin partidos','Cargá el fixture con rival y fecha. Después del partido completá el resultado y los convocados.','matches','Cargar partido');
- const t=today();const played=S.matches.filter(m=>isNum(m.gf)&&isNum(m.ga));
- const w=played.filter(m=>+m.gf>+m.ga).length,d=played.filter(m=>+m.gf===+m.ga).length,l=played.length-w-d;
- const gf=played.reduce((a,m)=>a+ +m.gf,0),ga=played.reduce((a,m)=>a+ +m.ga,0);
- if(played.length)h+=`<div class="stats"><div class="stat"><div class="k">Jugados</div><div class="v">${played.length}</div></div><div class="stat"><div class="k">G · E · P</div><div class="v">${w}·${d}·${l}</div></div><div class="stat"><div class="k">Goles</div><div class="v">${gf}:${ga}</div><div class="s">diferencia ${gf-ga>0?'+':''}${gf-ga}</div></div><div class="stat"><div class="k">Puntos</div><div class="v">${w*3+d}</div><div class="s">de ${played.length*3} posibles</div></div></div>`;
- return h+`<div class="list">${[...S.matches].sort(byDateDesc).map(m=>{const has=isNum(m.gf)&&isNum(m.ga);const res=has?(+m.gf>+m.ga?['Ganado','ok']:+m.gf===+m.ga?['Empate','amber']:['Perdido','warn']):m.date>=t?['Próximo','acc']:['Sin resultado',''];
-  return `<div class="row r-std">${dateCell(m.date)}<div class="main"><div class="t">vs ${esc(m.rival)}</div><div class="m">${m.venue?`<span>${esc(m.venue)}</span>`:''}${m.competition?`<span>${esc(m.competition)}</span>`:''}${m.time?`<span class="mono">${esc(m.time)} h</span>`:''}${Array.isArray(m.squad)&&m.squad.length?`<span>${m.squad.length} convocados</span>`:''}${byline(m)}</div></div>
-  <div class="side"><div class="figs">${has?`<span class="score">${+m.gf} – ${+m.ga}</span>`:''}<span class="pill ${res[1]}">${res[0]}</span></div>${rowActs('matches',m.id)}</div>
-  ${m.notes?`<div class="notes">${esc(m.notes)}</div>`:''}</div>`}).join('')}</div>`;
+ let h=`<div class="bar"><div><h2>Partidos</h2><p>Fixture, convocatoria, planilla de cada jugador y estadísticas de la temporada.</p></div><div class="tools">${S.matches.length?'<button class="btn" type="button" data-act="mxls">Excel</button><button class="btn" type="button" data-act="mpdf">PDF</button>':''}${addBtn('matches','Partido')}</div></div>`;
+ if(!S.matches.length)return h+empty('Sin partidos','Cargá el fixture con rival y fecha. Después del partido completá la planilla: titulares, minutos, goles, tarjetas y cambios.','matches','Cargar partido');
+ const t=today();const L=seasonMatches();const played=L.filter(hasRes);const w=played.filter(m=>mRes(m)[0]==='G').length,d=played.filter(m=>mRes(m)[0]==='E').length,l=played.length-w-d;
+ const gf=played.reduce((a,m)=>a+ +m.gf,0),ga=played.reduce((a,m)=>a+ +m.ga,0);const streak=played.slice(-5).map(m=>`<span class="rs ${mRes(m)[2]}">${mRes(m)[0]}</span>`).join('');
+ if(played.length)h+=`<div class="stats"><div class="stat"><div class="k">Puntos</div><div class="v">${w*3+d}</div><div class="s">${played.length} jugados · ${Math.round((w*3+d)/(played.length*3)*100)} %</div></div><div class="stat"><div class="k">G · E · P</div><div class="v">${w}·${d}·${l}</div><div class="s racha">${streak}</div></div><div class="stat"><div class="k">Goles</div><div class="v">${gf}:${ga}</div><div class="s">diferencia ${gf-ga>0?'+':''}${gf-ga}</div></div><div class="stat"><div class="k">Local · Visitante</div><div class="v" style="font-size:20px">${['Local','Visitante'].map(v=>{const P=played.filter(m=>m.venue===v);return P.reduce((a,m)=>a+(mRes(m)[0]==='G'?3:mRes(m)[0]==='E'?1:0),0)+'/'+P.length*3}).join(' · ')}</div><div class="s">puntos / posibles</div></div></div>`;
+ h+=`<div class="seg2"><label><input type="radio" name="mview" value="lista" ${mView==='lista'?'checked':''}><span>Fixture</span></label><label><input type="radio" name="mview" value="jug" ${mView==='jug'?'checked':''}><span>Jugadores</span></label><label><input type="radio" name="mview" value="pp" ${mView==='pp'?'checked':''}><span>Pelota parada</span></label></div>`;
+ if(mView==='jug')return h+mPlayersHTML(L);
+ if(mView==='pp')return h+mSetPiecesHTML(played);
+ const next=[...S.matches].filter(m=>!hasRes(m)&&m.date>=t).sort((a,b)=>a.date.localeCompare(b.date));const past=[...S.matches].filter(m=>!(!hasRes(m)&&m.date>=t)).sort(byDateDesc);
+ const row=m=>{const r=mRes(m)||(m.date>=t?['','Próximo','acc']:['','Sin resultado','']);const nS=Object.values(m.sheet||{}).filter(x=>+x.min>0).length;const sc=Array.isArray(m.squad)?m.squad.filter(pl).length:0;
+  return `<div class="row r-std click" data-act="mview" data-id="${m.id}">${dateCell(m.date)}<div class="main"><div class="t">vs ${esc(m.rival)}</div><div class="m">${m.venue?`<span>${esc(m.venue)}</span>`:''}${m.competition?`<span>${esc(m.competition)}</span>`:''}${m.time?`<span class="mono">${esc(m.time)} h</span>`:''}${sc?`<span>${sc} convocados</span>`:''}${nS?`<span>Planilla: ${nS} jugaron</span>`:hasRes(m)?'<span style="color:var(--amber)">Falta la planilla</span>':''}${rivalNote(m.rival)?'<span>Hay notas del rival</span>':''}</div></div>
+  <div class="side"><div class="figs">${hasRes(m)?`<span class="score">${+m.gf} – ${+m.ga}</span>`:''}<span class="pill ${r[2]}">${r[1]}</span></div><div class="acts">${m.date>=t&&!hasRes(m)?`<button class="btn ghost sm" type="button" data-act="mconv" data-id="${m.id}">Convocatoria</button>`:''}<button class="btn ghost sm" type="button" data-act="mtsheet" data-id="${m.id}">Planilla</button></div>${rowActs('matches',m.id)}</div></div>`};
+ const lim=yLimit();
+ return h+`<div class="pl-ctl"><label class="g-sub" for="yLimit">Amarillas para suspensión</label><select class="flt" id="yLimit" style="max-width:90px">${[3,4,5,6].map(n=>`<option ${lim===n?'selected':''}>${n}</option>`).join('')}</select></div>`
+  +(next.length?`<div class="panel"><h3>Próximos <small>${next.length}</small></h3><div class="list" style="border:0;border-radius:0 0 12px 12px">${next.map(row).join('')}</div></div>`:'')
+  +(past.length?`<div class="panel"><h3>Jugados <small>${past.length}</small></h3><div class="list" style="border:0;border-radius:0 0 12px 12px">${past.map(row).join('')}</div></div>`:'');
 }
+function mPlayersHTML(L){
+ const rows=sortedPlayers().map(p=>({p,s:pStats(p.id,L),y:suspInfo(p.id)})).filter(r=>r.s.pj||r.s.y||r.s.rd);
+ if(!rows.length)return `<div class="empty"><strong>Todavía no hay planillas</strong><p>Abrí un partido jugado y tocá <b>Planilla</b> para cargar titulares, minutos, goles, asistencias, tarjetas y cambios.</p></div>`;
+ const sorted=[...rows].sort((a,b)=>b.s.min-a.s.min);const top=k=>[...rows].filter(r=>r.s[k]).sort((a,b)=>b.s[k]-a.s[k]).slice(0,3);
+ return `<div class="stats"><div class="stat"><div class="k">Goleadores</div><div class="s" style="font-size:14px">${top('g').map(r=>`${esc(r.p.name)} <b>${r.s.g}</b>`).join('<br>')||'—'}</div></div><div class="stat"><div class="k">Asistencias</div><div class="s" style="font-size:14px">${top('a').map(r=>`${esc(r.p.name)} <b>${r.s.a}</b>`).join('<br>')||'—'}</div></div><div class="stat"><div class="k">Más minutos</div><div class="s" style="font-size:14px">${sorted.slice(0,3).map(r=>`${esc(r.p.name)} <b>${r.s.min}'</b>`).join('<br>')}</div></div></div>
+ <div class="tablewrap"><table><thead><tr><th>Jugador</th><th class="r">PJ</th><th class="r">Tit.</th><th class="r">Min</th><th class="r">Goles</th><th class="r">Asist.</th><th class="r">Amar.</th><th class="r">Rojas</th><th>Tarjetas</th></tr></thead><tbody>${sorted.map(r=>`<tr class="click" data-act="player" data-id="${r.p.id}"><td>${esc(r.p.name)}</td><td class="r num">${r.s.pj}</td><td class="r num">${r.s.tit}</td><td class="r num">${r.s.min}</td><td class="r num">${r.s.g||''}</td><td class="r num">${r.s.a||''}</td><td class="r num">${r.s.y||''}</td><td class="r num">${r.s.rd||''}</td><td>${r.y.susp?`<span class="pill warn">Suspendido (${esc(r.y.susp.why)})</span>`:r.y.near?`<span class="pill amber">${r.y.mod} amarillas: una más y se pierde un partido</span>`:''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function mSetPiecesHTML(played){
+ const tot=k=>SP.map(([c,l])=>[l,played.reduce((a,m)=>a+(+((m[k]||{})[c])||0),0)]);const F=tot('spF'),A=tot('spA');const sf=F.reduce((a,x)=>a+x[1],0),sa=A.reduce((a,x)=>a+x[1],0);
+ const gf=played.reduce((a,m)=>a+ +m.gf,0),ga=played.reduce((a,m)=>a+ +m.ga,0);
+ return `<div class="stats"><div class="stat"><div class="k">A favor de pelota parada</div><div class="v">${sf}</div><div class="s">${gf?Math.round(sf/gf*100):0} % de los goles a favor</div></div><div class="stat"><div class="k">En contra de pelota parada</div><div class="v ${sa?'warn':''}">${sa}</div><div class="s">${ga?Math.round(sa/ga*100):0} % de los goles en contra</div></div></div>
+ <div class="tablewrap"><table><thead><tr><th>Tipo</th><th class="r">A favor</th><th class="r">En contra</th></tr></thead><tbody>${SP.map((x,i)=>`<tr><td>${x[1]}</td><td class="r num">${F[i][1]}</td><td class="r num">${A[i][1]}</td></tr>`).join('')}</tbody></table></div><p class="g-note">Se carga en la planilla de cada partido.</p>`;
+}
+/* notas del rival */
+const rKey=r=>noAcc(r).trim();
+const rivalNote=r=>(club.rivals||{})[rKey(r)]||null;
+function openRivalNote(mid){const m=S.matches.find(x=>x.id===mid);if(!m)return;closeDoc();const n=rivalNote(m.rival);
+ $('#mTitle').textContent='Notas sobre '+m.rival;
+ $('#mBody').innerHTML=`<form class="form" id="rvFrm" data-id="${mid}" novalidate><div class="fld full"><label for="rv_txt">Sistema, jugadores clave, pelota parada, cancha…</label><textarea id="rv_txt" rows="8" placeholder="Ej: 4-4-2, presionan alto. El 9 cabecea bien en los córners. Cancha chica.">${esc(n?n.txt:'')}</textarea><span class="hint">Quedan guardadas para todos los partidos contra este rival.</span></div><div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">Guardar</button></div></form>`;showModal()}
+function saveRivalNote(f){const m=S.matches.find(x=>x.id===f.dataset.id);if(!m)return;const txt=$('#rv_txt').value.trim();const rv={...(club.rivals||{})};if(txt)rv[rKey(m.rival)]={txt,by:me.uid,at:new Date().toISOString()};else delete rv[rKey(m.rival)];club={...club,rivals:rv};setDoc(doc(db,'config','club'),{...club}).catch(err=>toast(errMsg(err)));closeModal();toast('Notas guardadas');openMatch(m.id)}
+/* ficha del partido */
+function openMatch(id){
+ const m=S.matches.find(x=>x.id===id);if(!m)return;closeModal();const r=mRes(m);const sh=m.sheet||{};const ps=Object.keys(sh).map(pl).filter(Boolean);
+ const tit=ps.filter(p=>sh[p.id].st==='T').sort((a,b)=>lineOf(a)-lineOf(b));const sup=ps.filter(p=>sh[p.id].st==='S');
+ const prev=S.matches.filter(x=>x.id!==m.id&&rKey(x.rival)===rKey(m.rival)&&hasRes(x)).sort(byDateDesc);const rn=rivalNote(m.rival);
+ const comp=ps.filter(p=>(+sh[p.id].min||0)<45).concat((Array.isArray(m.squad)?m.squad:[]).map(pl).filter(p=>p&&!sh[p.id]));
+ const gl=ps.filter(p=>+sh[p.id].g>0),as=ps.filter(p=>+sh[p.id].a>0),cards=ps.filter(p=>+sh[p.id].y>0||sh[p.id].r);
+ openDoc(sheetHead('Partido')+`<h1 class="sh-title">vs ${esc(m.rival)} ${hasRes(m)?`<span class="score">${+m.gf} – ${+m.ga}</span>`:''}</h1>
+ <div class="sh-meta">${[['Fecha',longDate(m.date)+(m.time?' · '+m.time+' h':'')],['Condición',m.venue],['Competencia',m.competition],['Resultado',r?r[1]:''],['Citación',m.meet?m.meet+' h':''],['Lugar',m.place],['RPE del partido',isNum(m.rpe)?String(m.rpe):'']].filter(x=>x[1]).map(x=>`<div><div class="k">${x[0]}</div><div class="v">${esc(x[1])}</div></div>`).join('')}</div>
+ ${tit.length?`<div class="sh-cols"><div class="sh-sec"><h3>Titulares</h3><ol class="sh-rut">${tit.map(p=>`<li>${esc(p.name)} <span class="g-sub">${sh[p.id].min}'</span></li>`).join('')}</ol></div><div class="sh-sec"><h3>Suplentes</h3><ul class="sh-rut">${sup.map(p=>`<li>${esc(p.name)} <span class="g-sub">${+sh[p.id].min?sh[p.id].min+"'":'no entró'}</span></li>`).join('')||'<li>—</li>'}</ul></div></div>`:`<div class="sh-sec noprint"><p>Todavía no se cargó la planilla. <button class="btn sm primary" type="button" data-act="mtsheet" data-id="${m.id}">Cargar planilla</button></p></div>`}
+ ${(m.subs||[]).length?`<div class="sh-sec"><h3>Cambios</h3><ul class="sh-rut">${m.subs.map(z=>`<li><b>${esc(z.min)}'</b> sale ${esc(plName(z.out))}, entra ${esc(plName(z.in))}${z.why?` <span class="g-sub">(${esc(z.why.toLowerCase())})</span>`:''}</li>`).join('')}</ul></div>`:''}
+ ${gl.length||as.length||cards.length?`<div class="sh-sec"><h3>Goles, asistencias y tarjetas</h3><ul class="sh-rut">${gl.map(p=>`<li>⚽ ${esc(p.name)}${+sh[p.id].g>1?' ×'+sh[p.id].g:''}</li>`).join('')}${as.map(p=>`<li>🅰 ${esc(p.name)}${+sh[p.id].a>1?' ×'+sh[p.id].a:''}</li>`).join('')}${cards.map(p=>`<li>${sent(sh[p.id])?'🟥':'🟨'} ${esc(p.name)}${+sh[p.id].y>=2?' (doble amarilla)':''}</li>`).join('')}</ul></div>`:''}
+ ${m.spF||m.spA?`<div class="sh-sec"><h3>Pelota parada</h3><p style="margin:0">A favor: ${SP.filter(x=>+((m.spF||{})[x[0]])).map(x=>x[1].toLowerCase()+' '+m.spF[x[0]]).join(', ')||'ninguno'} · En contra: ${SP.filter(x=>+((m.spA||{})[x[0]])).map(x=>x[1].toLowerCase()+' '+m.spA[x[0]]).join(', ')||'ninguno'}</p></div>`:''}
+ ${hasRes(m)&&comp.length?`<div class="sh-sec"><h3>Compensatorio en MD+1</h3><p style="margin:0">${comp.map(p=>esc(p.name)+' <span class="g-sub">('+(sh[p.id]?(+sh[p.id].min||0)+"'":'no jugó')+')</span>').join(', ')}</p><p class="g-sub" style="margin:4px 0 0">Jugaron menos de 45 minutos o no entraron.</p></div>`:''}
+ <div class="sh-sec"><h3>Sobre ${esc(m.rival)} <button class="btn ghost sm noprint" type="button" data-act="rival" data-id="${m.id}">${rn?'Editar':'+ Notas'}</button></h3>${rn?`<div style="white-space:pre-wrap">${esc(rn.txt)}</div>`:'<p class="g-sub" style="margin:0">Sin notas todavía.</p>'}${prev.length?`<p style="margin:8px 0 0;font-size:14px"><b>Antes:</b> ${prev.map(x=>`${fdy(x.date)} ${+x.gf}–${+x.ga} (${mRes(x)[1].toLowerCase()})`).join(' · ')}</p>`:''}</div>
+ ${m.notes?`<div class="sh-sec"><h3>Notas del partido</h3><div style="white-space:pre-wrap">${esc(m.notes)}</div></div>`:''}`,
+ `<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools"><button class="btn primary" type="button" data-act="mtsheet" data-id="${m.id}">Planilla</button><button class="btn" type="button" data-act="mconv" data-id="${m.id}">Convocatoria</button><button class="btn" type="button" data-act="print">PDF</button><button class="btn" type="button" data-act="edit" data-col="matches" data-id="${m.id}">Editar</button></div></div>`);
+}
+/* convocatoria */
+function convText(m){const ps=(Array.isArray(m.squad)?m.squad:[]).map(pl).filter(Boolean).sort((a,b)=>lineOf(a)-lineOf(b)||(a.name||'').localeCompare(b.name||''));const meet=m.meet||(m.time?hm(m.time,90):'');
+ const by={};ps.forEach(p=>{(by[lineOf(p)]=by[lineOf(p)]||[]).push(p)});
+ return [`Convocados vs ${m.rival} · ${dayLong(m.date)}${m.time?' · '+m.time+' h':''}${m.competition?' · '+m.competition:''}`,meet?`Citación: ${meet} h${m.place?' en '+m.place:''}`:(m.place?'Lugar: '+m.place:''),'',...Object.keys(by).sort().map(k=>`${LINES[k]}: ${by[k].map(p=>p.name).join(', ')}`),'',`Llevar: ${m.bring||'ropa de juego, canilleras y documento'}.`,'Si no podés estar, avisá cuanto antes.'].filter((x,i,a)=>x!==''||a[i-1]!=='').join('\n')}
+function openConv(id){const m=S.matches.find(x=>x.id===id);if(!m)return;closeDoc();const n=(Array.isArray(m.squad)?m.squad:[]).filter(pl).length;
+ $('#mTitle').textContent='Convocatoria';
+ if(!n){$('#mBody').innerHTML=`<p style="margin:0">Primero elegí los convocados editando el partido.</p><div class="formacts"><button type="button" class="btn" data-act="close">Cerrar</button><button type="button" class="btn primary" data-act="edit" data-col="matches" data-id="${m.id}">Elegir convocados</button></div>`;showModal();return}
+ $('#mBody').innerHTML=`<div class="form"><p class="full" style="margin:0">${n} convocados. Podés cambiar el texto antes de mandarlo. La hora de citación, el lugar y qué llevar se cargan editando el partido.</p>${waBox(convText(m))}</div>`;showModal()}
+/* planilla del partido */
+function openMatchSheet(id){
+ const m=S.matches.find(x=>x.id===id);if(!m)return;closeDoc();
+ const pool=(Array.isArray(m.squad)&&m.squad.filter(pl).length?m.squad.filter(pl):sortedPlayers().map(p=>p.id));const sh=m.sheet||{};
+ const rows={};pool.forEach(pid=>{const x=sh[pid]||{};rows[pid]={st:x.st||'',g:x.g||'',a:x.a||'',y:x.y||0,r:!!x.r,minE:x.minE?x.min:''}});Object.keys(sh).forEach(pid=>{if(!rows[pid]&&pl(pid)){const x=sh[pid];rows[pid]={st:x.st||'',g:x.g||'',a:x.a||'',y:x.y||0,r:!!x.r,minE:x.minE?x.min:''}}});
+ MS={id,rows,subs:(m.subs||[]).map(z=>({...z})),dur:m.dur||90,spF:{...(m.spF||{})},spA:{...(m.spA||{})},gf:m.gf??'',ga:m.ga??''};renderMatchSheet();showModal();
+}
+function renderMatchSheet(){
+ const m=S.matches.find(x=>x.id===MS.id);const mins=matchMinutes();const ids=Object.keys(MS.rows).filter(pl).sort((a,b)=>{const pa=pl(a),pb=pl(b);const o={T:0,S:1,'':2};return o[MS.rows[a].st]-o[MS.rows[b].st]||lineOf(pa)-lineOf(pb)||(pa.name||'').localeCompare(pb.name||'')});
+ const T=ids.filter(p=>MS.rows[p].st==='T'),Su=ids.filter(p=>MS.rows[p].st==='S');
+ $('#mTitle').textContent='Planilla · vs '+m.rival;
+ $('#mBody').innerHTML=`<form class="form" id="msFrm" novalidate>
+ <div class="fld"><label for="ms_gf">Goles a favor</label><input id="ms_gf" type="number" min="0" max="30" value="${esc(MS.gf)}"></div><div class="fld"><label for="ms_ga">Goles en contra</label><input id="ms_ga" type="number" min="0" max="30" value="${esc(MS.ga)}"></div>
+ <div class="fld"><label for="ms_dur">Duración (min)</label><input id="ms_dur" type="number" min="20" max="130" value="${esc(MS.dur)}"></div>
+ <div class="fld full"><span class="lb">Jugadores · titulares ${T.length}${T.length>11?' <b style="color:var(--warn)">(más de 11)</b>':''} · suplentes ${Su.length}</span><div class="tablewrap ms-grid"><table><thead><tr><th>Jugador</th><th>Rol</th><th class="r">Min</th><th class="r">G</th><th class="r">A</th><th class="r">Amar.</th><th class="r">Roja</th></tr></thead><tbody>${ids.map(pid=>{const x=MS.rows[pid];return `<tr data-ms="${pid}"><td>${esc(pl(pid).name)}</td><td><span class="ms-role">${[['T','Titular'],['S','Suplente'],['','No jugó']].map(o=>`<button type="button" class="ab ${x.st===o[0]?'on ab-'+({T:'P',S:'S','':'L'})[o[0]]:''}" data-act="msrole" data-id="${pid}" data-v="${o[0]}">${o[1]}</button>`).join('')}</span></td><td class="r"><input data-msk="min" type="number" min="0" max="130" value="${esc(x.minE)}" placeholder="${mins[pid]||0}" aria-label="Minutos"></td><td class="r"><input data-msk="g" type="number" min="0" max="9" value="${esc(x.g)}" aria-label="Goles"></td><td class="r"><input data-msk="a" type="number" min="0" max="9" value="${esc(x.a)}" aria-label="Asistencias"></td><td class="r"><select data-msk="y" aria-label="Amarillas">${[0,1,2].map(n=>`<option ${+x.y===n?'selected':''}>${n}</option>`).join('')}</select></td><td class="r"><input data-msk="r" type="checkbox" ${x.r?'checked':''} aria-label="Roja"></td></tr>`}).join('')}</tbody></table></div><span class="hint">Los minutos se calculan solos con el rol y los cambios. Escribí un número solo si querés corregirlo. Dos amarillas cuentan como expulsión.</span></div>
+ <div class="fld full"><span class="lb">Cambios</span><div class="ms-subs">${MS.subs.map((z,i)=>`<div class="ms-sub" data-sub="${i}"><input data-subk="min" type="number" min="1" max="130" value="${esc(z.min??'')}" placeholder="Min" aria-label="Minuto"><select data-subk="out" aria-label="Sale"><option value="">Sale…</option>${ids.filter(p=>MS.rows[p].st).map(p=>`<option value="${p}" ${z.out===p?'selected':''}>${esc(pl(p).name)}</option>`).join('')}</select><select data-subk="in" aria-label="Entra"><option value="">Entra…</option>${Su.map(p=>`<option value="${p}" ${z.in===p?'selected':''}>${esc(pl(p).name)}</option>`).join('')}</select><select data-subk="why" aria-label="Motivo"><option value="">Motivo…</option>${SUB_WHY.map(w=>`<option ${z.why===w?'selected':''}>${w}</option>`).join('')}</select><button type="button" class="linkbtn" data-act="mssubdel" data-i="${i}">Quitar</button></div>`).join('')}</div><div><button type="button" class="btn sm" data-act="mssubadd">+ Agregar cambio</button></div></div>
+ <div class="fld full"><span class="lb">Goles de pelota parada</span><div class="ms-sp">${[['spF','A favor'],['spA','En contra']].map(([k,l])=>`<div><b>${l}</b>${SP.map(([c,cl])=>`<label>${cl}<input data-sp="${k}.${c}" type="number" min="0" max="9" value="${esc((MS[k]||{})[c]??'')}"></label>`).join('')}</div>`).join('')}</div></div>
+ <div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary">Guardar planilla</button></div></form>`;
+}
+function msInput(el){if(!MS)return;const tr=el.closest('[data-ms]');if(tr){const x=MS.rows[tr.dataset.ms];const k=el.dataset.msk;if(k==='r')x.r=el.checked;else if(k==='min')x.minE=el.value;else x[k]=el.value;if(k==='y'||k==='r')return;return}
+ const sb=el.closest('[data-sub]');if(sb){MS.subs[+sb.dataset.sub][el.dataset.subk]=el.dataset.subk==='min'?(el.value===''?'':+el.value):el.value;if(el.dataset.subk!=='why'){const mins=matchMinutes();document.querySelectorAll('[data-ms]').forEach(r=>{const i=r.querySelector('[data-msk=min]');if(i)i.placeholder=mins[r.dataset.ms]||0})}return}
+ if(el.dataset.sp){const [k,c]=el.dataset.sp.split('.');MS[k][c]=el.value===''?'':+el.value;return}
+ if(el.id==='ms_dur'){MS.dur=+el.value||90;const mins=matchMinutes();document.querySelectorAll('[data-ms]').forEach(r=>{const i=r.querySelector('[data-msk=min]');if(i)i.placeholder=mins[r.dataset.ms]||0})}
+ if(el.id==='ms_gf')MS.gf=el.value;if(el.id==='ms_ga')MS.ga=el.value;}
+function saveMatchSheet(){
+ const m=S.matches.find(x=>x.id===MS.id);if(!m)return;const mins=matchMinutes();const sheet={};
+ Object.entries(MS.rows).forEach(([pid,x])=>{if(!pl(pid))return;const g=+x.g||0,a=+x.a||0,y=+x.y||0;const minE=x.minE!==''&&isNum(+x.minE);if(!x.st&&!g&&!a&&!y&&!x.r)return;sheet[pid]={st:x.st,min:minE?+x.minE:mins[pid]||0,minE:!!minE,g,a,y,r:!!x.r}});
+ const subs=MS.subs.filter(z=>z.out||z.in);const num=v=>v===''||v==null?null:+v;
+ const body={...m,sheet,subs,dur:+MS.dur||90,spF:MS.spF,spA:MS.spA,gf:num(MS.gf),ga:num(MS.ga),editBy:me.uid,editAt:new Date().toISOString()};delete body.id;
+ setDoc(doc(db,'matches',m.id),body).catch(err=>toast(errMsg(err)));
+ // suspensiones para el próximo partido
+ const merged={...body,id:m.id};const L=seasonMatches().map(x=>x.id===m.id?merged:x).filter(x=>x.date<=today()&&x.sheet);const isLast=L.length&&L[L.length-1].id===m.id;const nx=nextMatchAfter(m.date);const sus=[];
+ if(isLast)Object.keys(sheet).forEach(pid=>{let acc=0,ev=null;L.forEach(x=>{const s_=x.sheet&&x.sheet[pid];if(!s_)return;if(sent(s_))ev=x.id;else if(+s_.y>0){acc+=+s_.y;if(acc%yLimit()===0)ev=x.id}});if(ev===m.id){const p=pl(pid);sus.push(p.name);const pb={...p,status:'Suspendido',statusUntil:nx?nx.date:addDays(m.date,7),editBy:me.uid,editAt:new Date().toISOString()};delete pb.id;setDoc(doc(db,'players',pid),pb).catch(()=>{})}});
+ MS=null;closeModal();toast(sus.length?`Planilla guardada. Suspendidos para el próximo partido: ${sus.join(', ')}.`:'Planilla guardada');
+}
+function mXls(){const L=seasonMatches();const q=v=>{const x=String(v??'');return /[;"\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x};
+ const rows=[['Partidos'],['Fecha','Rival','Condición','Competencia','GF','GC','Resultado','Pelota parada a favor','Pelota parada en contra'],...L.map(m=>[fdy(m.date),m.rival,m.venue||'',m.competition||'',m.gf??'',m.ga??'',(mRes(m)||['',''])[1],SP.reduce((a,x)=>a+(+((m.spF||{})[x[0]])||0),0),SP.reduce((a,x)=>a+(+((m.spA||{})[x[0]])||0),0)]),[],['Jugadores'],['Jugador','PJ','Titular','Minutos','Goles','Asistencias','Amarillas','Rojas'],...sortedPlayers().map(p=>({p,s:pStats(p.id,L)})).filter(r=>r.s.pj||r.s.y).map(r=>[r.p.name,r.s.pj,r.s.tit,r.s.min,r.s.g,r.s.a,r.s.y,r.s.rd])];
+ const csv='﻿'+rows.map(r=>r.map(q).join(';')).join('\r\n');
+ try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=`partidos-${today()}.csv`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}catch(_){toast('No se pudo descargar el archivo.')}}
+function mPdf(){const L=seasonMatches();const played=L.filter(hasRes);
+ openDoc(sheetHead('Temporada · partidos')+`<div class="tablewrap sh-table"><table><thead><tr><th>Fecha</th><th>Rival</th><th>Cond.</th><th>Competencia</th><th class="r">Resultado</th></tr></thead><tbody>${L.map(m=>`<tr><td class="num">${fdy(m.date)}</td><td>${esc(m.rival)}</td><td>${esc(m.venue||'')}</td><td>${esc(m.competition||'')}</td><td class="r">${hasRes(m)?`${+m.gf}–${+m.ga} (${mRes(m)[0]})`:'—'}</td></tr>`).join('')}</tbody></table></div><p style="font-size:13px">${played.length} jugados · ${played.filter(m=>mRes(m)[0]==='G').length} G, ${played.filter(m=>mRes(m)[0]==='E').length} E, ${played.filter(m=>mRes(m)[0]==='P').length} P</p><div class="sh-sec"><h3>Jugadores</h3>${mPlayersHTML(L)}</div>`,
+ `<div class="wrap"><button class="btn ghost" type="button" data-act="docclose">← Volver</button><div class="tools"><button class="btn primary" type="button" data-act="print">Descargar PDF</button></div></div>`)}
 const sqRow=(x,i)=>`<div class="sq-row" data-sq="${x.id}"><input type="text" value="${esc(x.name)}" placeholder="Ej: Reserva" aria-label="Nombre del plantel ${i+1}">${i?`<button class="btn ghost sm danger" type="button" data-act="sqdel">Quitar</button>`:'<span class="g-sub">Principal</span>'}</div>`;
 function saveSquads(){
  const L=[...document.querySelectorAll('#sqList .sq-row')].map(r=>({id:r.dataset.sq,name:r.querySelector('input').value.trim()}));
@@ -1278,7 +1398,7 @@ function dataStatus(lbl){
  const L=lbl.toLowerCase(),ses=S.sessions.filter(s=>!s.cancel),tst=re=>recent(S.tests.filter(t=>re.test(t.test||'')),30);
  if(/gps|90 % de su velocidad/.test(L))return ['no','Necesita GPS'];
  if(/rpe del partido/.test(L))return recent(S.checkins.filter(c=>c.kind==='rpe'&&c.activity==='Partido'),30)?['ok']:['idle'];
- if(/minutos jugados|goles|cambios y su motivo|pelota parada a favor|jugó más de 60/.test(L))return ['no','Falta la planilla de partido'];
+ if(/minutos jugados|goles|cambios y su motivo|pelota parada a favor|jugó más de 60/.test(L))return S.matches.some(m=>m.sheet&&Object.keys(m.sheet).length&&inLastDays(m.date,30))?['ok']:['idle','Se carga en la planilla de cada partido'];
  if(/^bienestar|zona de dolor/.test(L))return recent(S.checkins.filter(c=>c.kind==='well'),14)?['ok']:['idle'];
  if(/rpe de cada jugador/.test(L))return recent(S.checkins.filter(c=>c.kind==='rpe'),14)?['ok']:['idle'];
  if(/carga = rpe|carga de la semana/.test(L))return recent(ses.filter(s=>isNum(s.rpe)),14)?['ok']:['idle'];
@@ -1299,9 +1419,9 @@ function gData(){
  const items=DATA.flatMap(d=>d.items).filter(i=>gset().gps||!/GPS/.test(i[0]));const st=items.map(i=>dataStatus(i[0])[0]);
  const n=k=>st.filter(x=>x===k).length;
  return `<p class="g-note">Qué conviene registrar, en qué parte de la app va cada dato y si se está registrando. Mejor pocos datos tomados siempre que muchos tomados a veces.</p>
- <div class="stats"><div class="stat"><div class="k">Se registran</div><div class="v">${n('ok')}</div><div class="s">de ${items.length} datos</div></div><div class="stat"><div class="k">Sin datos recientes</div><div class="v ${n('idle')?'':''}">${n('idle')}</div><div class="s">la app lo tiene, falta cargarlo</div></div><div class="stat"><div class="k">Faltan en la app</div><div class="v ${n('no')?'warn':''}">${n('no')}</div><div class="s">${gset().gps?'planilla de partido y GPS':'planilla de partido'}</div></div><div class="stat"><div class="k">A mano</div><div class="v">${n('note')}</div><div class="s">en observaciones</div></div></div>`
+ <div class="stats"><div class="stat"><div class="k">Se registran</div><div class="v">${n('ok')}</div><div class="s">de ${items.length} datos</div></div><div class="stat"><div class="k">Sin datos recientes</div><div class="v ${n('idle')?'':''}">${n('idle')}</div><div class="s">la app lo tiene, falta cargarlo</div></div><div class="stat"><div class="k">Faltan en la app</div><div class="v ${n('no')?'warn':''}">${n('no')}</div><div class="s">${gset().gps?'GPS':'—'}</div></div><div class="stat"><div class="k">A mano</div><div class="v">${n('note')}</div><div class="s">en observaciones</div></div></div>`
  +DATA.map(d=>`<div class="panel"><h3>${esc(d.g)}</h3><div class="body"><div class="mini">${d.items.filter(i=>gset().gps||!/GPS/.test(i[0])).map(i=>{const [k,why]=dataStatus(i[0]);return `<div class="dt-row"><span style="flex:1;min-width:180px">${esc(i[0])}${why?`<span class="g-sub" style="display:block">${esc(why)}</span>`:''}</span><span class="dt-pills">${i[1]?`<span class="pill acc">${esc(i[1])}</span>`:''}<span class="pill ${DST[k][0]}">${DST[k][1]}</span></span></div>`}).join('')}</div></div></div>`).join('')
- +`<p class="g-note">“Se registra” quiere decir que hay datos de las últimas 2 semanas (de los tests, del último mes). Los minutos jugados, los goles y los cambios se resuelven con la planilla de partido por jugador, que vamos a ver en Partidos.</p>`;
+ +`<p class="g-note">“Se registra” quiere decir que hay datos de las últimas 2 semanas (de los tests, del último mes). Los minutos jugados, los goles, los cambios y la pelota parada se cargan en la planilla de cada partido.</p>`;
 }
 /* metros cuadrados por jugador en tareas */
 function taskPlayers(t){
@@ -1950,6 +2070,7 @@ function sessionSheet(s){
  +(s.cancel?`<div class="sh-cx"><b>Sesión suspendida</b> · ${esc(cxLong(s.cancel))}${s.cancelNote?' · '+esc(s.cancelNote):''}<span>No cuenta para la asistencia ni para la carga.</span></div>`:'')
  +`<div class="sh-meta">${meta.map(m=>`<div><div class="k">${m[0]}</div><div class="v">${esc(m[1])}</div></div>`).join('')}</div>`
  +sessSummary(s)
+ +(()=>{const c=mdCode(s.date);if(c!=='MD+1'&&c!=='MD+2')return '';const m=S.matches.find(x=>x.date===addDays(s.date,c==='MD+1'?-1:-2));if(!m||!m.sheet)return '';const sh=m.sheet;const L=Object.keys(sh).map(pl).filter(p=>p&&(+sh[p.id].min||0)<45).concat((Array.isArray(m.squad)?m.squad:[]).map(pl).filter(p=>p&&!sh[p.id]));return L.length?`<div class="sh-sec sh-out"><h3>Compensatorio <small>jugaron menos de 45' vs ${esc(m.rival)}</small></h3><div class="sh-outl">${L.map(p=>`<div><b>${esc(p.name)}</b> <span class="g-sub">${sh[p.id]?(+sh[p.id].min||0)+"'":'no jugó'}</span></div>`).join('')}</div></div>`:''})()
  +(out.length?`<div class="sh-sec sh-out"><h3>No están disponibles <small>${out.length}</small></h3><div class="sh-outl">${out.map(o=>`<div><b>${esc(o.p.name)}</b> <span class="pill ${o.a[1]}">${esc(o.a[0])}</span>${o.inj?` <span class="g-sub">${esc([o.inj.zone,o.inj.side].filter(Boolean).join(' '))}${o.inj.eta?' · vuelve '+fd(o.inj.eta):''}</span>`:o.p.statusUntil?` <span class="g-sub">hasta ${fd(o.p.statusUntil)}</span>`:''}</div>`).join('')}</div>${injOut.length&&s.type!=='Readaptación'?`<div class="noprint" style="margin-top:8px"><button class="btn sm" type="button" data-act="sreadapt" data-id="${s.id}">Armar sesión de readaptación para ${injOut.length===1?'el lesionado':'los '+injOut.length+' lesionados'}</button></div>`:''}</div>`:'')
  +(()=>{const r=s.routine&&S.routines.find(x=>x.id===s.routine);if(!r)return '';const ex=rEx(r);return `<div class="sh-sec"><h3>Rutina: ${esc(r.name)}${isNum(r.duration)?` <small style="text-transform:none;letter-spacing:0;font-weight:400">· ${+r.duration} min</small>`:''}</h3><ol class="sh-rut">${ex.map(x=>`<li><b>${esc(x.name)}</b>${[x.sets&&x.reps?x.sets+' × '+x.reps:(x.sets||x.reps||''),x.load].filter(Boolean).length?' · '+esc([x.sets&&x.reps?x.sets+' × '+x.reps:(x.sets||x.reps||''),x.load].filter(Boolean).join(' · ')):''}${x.notes?`<span class="g-sub"> — ${esc(x.notes)}</span>`:''}</li>`).join('')}</ol></div>`})()
  +(s.focus?`<div class="sh-sec"><h3>Objetivo general</h3><div style="font-size:16px;font-weight:600">${esc(s.focus)}</div></div>`:'')
@@ -2151,6 +2272,7 @@ function painRanking(d){const from=addDays(d,-13);const m={};S.checkins.filter(c
 function wellFlags(pid,d,w){const f=[];if(!w)return f;if(WELL.some(x=>+w[x[0]]<=2))f.push(['warn','Algún valor en 1 o 2']);const b=wellBase(pid,d);if(b!=null&&b-wellTotal(w)>=3)f.push(['warn',`${Math.round(b-wellTotal(w))} puntos bajo su promedio`]);const pr=painRepeat(pid,d);if(pr)f.push(['amber',`Dolor repetido: ${pr.k} (${pr.n} días)`]);return f}
 /* carga individual: última semana contra el promedio de las 4 anteriores */
 function loadItems(pid){const base=S.checkins.filter(c=>c.kind==='rpe'&&c.activity!=='Gimnasio'&&c.player===pid&&isNum(c.rpe)&&isNum(c.minutes));
+ S.matches.forEach(m=>{const x=m.sheet&&m.sheet[pid];if(!x||!(+x.min>0))return;if(base.some(c=>c.date===m.date&&c.activity==='Partido'))return;base.push({date:m.date,rpe:isNum(m.rpe)?+m.rpe:7,minutes:+x.min,activity:'Partido'})});
  const g={};[...S.checkins.filter(c=>(c.kind==='gym'||(c.kind==='rpe'&&c.activity==='Gimnasio'))&&c.player===pid&&isNum(c.rpe)&&isNum(c.minutes)).map(c=>({date:c.date,rpe:+c.rpe,minutes:+c.minutes})),...S.gymlogs.filter(l=>l.player===pid&&isNum(l.rpe)&&isNum(l.duration)).map(l=>({date:l.date,rpe:+l.rpe,minutes:+l.duration}))].forEach(x=>{const v=x.rpe*x.minutes;if(!g[x.date]||v>g[x.date].rpe*g[x.date].minutes)g[x.date]=x});
  return [...base,...Object.values(g)]}
 function acwr(pid,d){const L=loadItems(pid);const sum=(a,b)=>L.filter(c=>c.date>a&&c.date<=b).reduce((x,c)=>x+c.rpe*c.minutes,0);
@@ -2176,8 +2298,8 @@ function wellDay(d){
  const v=x=>`<td class="r"><span class="wv ${+x<=2?'lo':+x>=4?'hi':''}">${esc(x??'–')}</span></td>`;
  const delBtn=id=>`<button class="btn ghost sm danger" type="button" data-act="del" data-col="checkins" data-id="${id}">Borrar</button>`;
  let out=`<div class="stats"><div class="stat"><div class="k">Respondieron</div><div class="v">${ans.length}/${ps.length}</div><div class="s">${no.length?`<button class="linkbtn" type="button" data-act="wremind">Recordar a los ${no.length} que faltan</button>`:'respondieron todos'}</div></div><div class="stat"><div class="k">Bienestar promedio</div><div class="v">${avg}</div><div class="s">sobre 20</div></div><div class="stat"><div class="k">Alertas</div><div class="v ${alerts.length?'warn':''}">${alerts.length}</div><div class="s">valores en 1–2 o muy bajo su promedio</div></div><div class="stat"><div class="k">Dolor repetido</div><div class="v ${pains.length?'amber':''}">${pains.length}</div><div class="s">misma zona 3 días o más</div></div></div>`;
- let match=null,mins={};if(md1){match=S.matches.find(m=>m.date===addDays(d,-1));S.checkins.filter(c=>c.kind==='rpe'&&c.activity==='Partido'&&c.date===addDays(d,-1)&&isNum(c.minutes)).forEach(c=>mins[c.player]=+c.minutes);
-  out+=`<div class="banner well-md1"><b>Día después del partido${match?' vs '+esc(match.rival):''}.</b> Primero dolor muscular y cansancio. ${Object.keys(mins).length?'Separados según los minutos que cargó cada uno en su RPE del partido.':'Cuando los jugadores cargan el RPE del partido con sus minutos, acá se separan los que jugaron 60 minutos o más.'}</div>`}
+ let match=null,mins={};if(md1){match=S.matches.find(m=>m.date===addDays(d,-1));S.checkins.filter(c=>c.kind==='rpe'&&c.activity==='Partido'&&c.date===addDays(d,-1)&&isNum(c.minutes)).forEach(c=>mins[c.player]=+c.minutes);if(match&&match.sheet)Object.entries(match.sheet).forEach(([pid,x])=>{if(!(pid in mins)&&isNum(x.min))mins[pid]=+x.min});
+  out+=`<div class="banner well-md1"><b>Día después del partido${match?' vs '+esc(match.rival):''}.</b> Primero dolor muscular y cansancio. ${Object.keys(mins).length?'Separados según los minutos de la planilla del partido o del RPE de cada uno.':'Cuando los jugadores cargan el RPE del partido con sus minutos, acá se separan los que jugaron 60 minutos o más.'}</div>`}
  const row=({p,w,f})=>w?`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}${f.length?`<div class="wfs">${f.map(x=>`<span class="pill ${x[0]} wf">${esc(x[1])}</span>`).join('')}${f.some(x=>/Dolor repetido/.test(x[1]))&&!activeInj().some(i=>i.player===p.id)?`<button class="btn ghost sm" type="button" data-act="wellinj" data-id="${p.id}">Registrar como lesión</button>`:''}</div>`:''}</td>${W.map(x=>v(w[x[0]])).join('')}<td class="r num"><b>${wellTotal(w)}</b>/20</td><td style="white-space:normal;min-width:140px">${esc([w.painZone,w.note].filter(Boolean).join(' · '))}</td><td>${delBtn(w.id)}</td></tr>`:`<tr class="click" data-act="player" data-id="${p.id}"><td><span class="num" style="color:var(--muted)">${isNum(p.number)?+p.number:''}</span> ${esc(p.name)}</td><td colspan="${WELL.length+3}" style="color:var(--muted)">Sin responder</td></tr>`;
  const sorted=L=>[...L].sort((a,b)=>(b.f.length-a.f.length)||((a.w?wellTotal(a.w):99)-(b.w?wellTotal(b.w):99)));
  const head=`<thead><tr><th>Jugador</th>${W.map(w=>`<th class="r">${w[1]}</th>`).join('')}<th class="r">Total</th><th>Dolor / comentario</th><th></th></tr></thead>`;
@@ -2380,6 +2502,15 @@ document.addEventListener('click',e=>{
  else if(a==='wremind')openWellRemind();
  else if(a==='gymguide')openGymGuide();
  else if(a==='tsheet')openTestSheet();
+ else if(a==='mview'){if(e.target.closest('.acts'))return;openMatch(b.dataset.id)}
+ else if(a==='mtsheet'){e.stopPropagation();openMatchSheet(b.dataset.id)}
+ else if(a==='mconv'){e.stopPropagation();openConv(b.dataset.id)}
+ else if(a==='rival')openRivalNote(b.dataset.id);
+ else if(a==='msrole'){if(!MS)return;MS.rows[b.dataset.id].st=b.dataset.v;renderMatchSheet()}
+ else if(a==='mssubadd'){if(!MS)return;MS.subs.push({min:'',out:'',in:'',why:''});renderMatchSheet()}
+ else if(a==='mssubdel'){if(!MS)return;MS.subs.splice(+b.dataset.i,1);renderMatchSheet()}
+ else if(a==='mxls')mXls();
+ else if(a==='mpdf')mPdf();
  else if(a==='injview'){if(e.target.closest('.acts'))return;openInjury(b.dataset.id)}
  else if(a==='injstep')injStep(b.dataset.id,b.dataset.k);
  else if(a==='injlogdel')injLogDel(b.dataset.id,b.dataset.k);
@@ -2480,6 +2611,9 @@ document.addEventListener('change',e=>{
  if(e.target.name==='rutf'){rutF=e.target.value;render()}
  if(e.target.name==='testview'){testView=e.target.value;render()}
  if(e.target.name==='injview'){injView=e.target.value;render()}
+ if(e.target.name==='mview'){mView=e.target.value;render()}
+ if(e.target.id==='yLimit'){club={...club,yellowLimit:+e.target.value};setDoc(doc(db,'config','club'),{...club}).catch(()=>{});render()}
+ if(MS&&e.target.closest&&e.target.closest('#msFrm')){msInput(e.target);if(e.target.dataset.subk==='out'||e.target.dataset.subk==='in')renderMatchSheet()}
  if(e.target.id==='cmpA'){cmpA=e.target.value;render()}
  if(e.target.id==='cmpB'){cmpB=e.target.value;render()}
  if(e.target.id==='ts_date'&&TS){TS.date=e.target.value}
@@ -2498,6 +2632,7 @@ document.addEventListener('input',e=>{
  if(id==='wa_txt'){const l=$('#waLink');if(l)l.href='https://wa.me/?text='+encodeURIComponent(e.target.value)}
  if(e.target.dataset&&e.target.dataset.ts!==undefined&&TS){TS.vals[e.target.dataset.ts]=e.target.value}
  if(id==='f_test'){const m=tmeta(e.target.value);const u=$('#f_unit');if(m&&u)u.value=m.unit}
+ if(MS&&e.target.closest&&e.target.closest('#msFrm'))msInput(e.target);
  if(id==='rutQ'){rutQ=e.target.value;const l=$('#rutList');if(l){const tmp=document.createElement('div');tmp.innerHTML=vRoutines();l.replaceWith(tmp.querySelector('#rutList'))}}
  if(id==='libQ'){libQ=e.target.value;const l=$('#libList');if(l){const tmp=document.createElement('div');tmp.innerHTML=vLib();const nl=tmp.querySelector('#libList');l.replaceWith(nl);hydrateMedia(nl)}}
  if(id==='sesQ'){sesQ=e.target.value;const l=$('#sesList');if(l)l.innerHTML=sesLists()}
@@ -2512,6 +2647,8 @@ document.addEventListener('submit',e=>{
  if(id==='authFrm')return onAuthForm(e);
  if(id==='frm')return submitForm(e);
  if(id==='attFrm')return saveAtt(e);
+ if(id==='msFrm'){e.preventDefault();return saveMatchSheet()}
+ if(id==='rvFrm'){e.preventDefault();return saveRivalNote(e.target)}
  if(id==='injLogFrm'){e.preventDefault();return injLogAdd(e.target)}
  if(id==='tsFrm'){e.preventDefault();return saveTestSheet()}
  if(id==='ltrFrm'){e.preventDefault();return saveLibToRoutine(e.target)}
