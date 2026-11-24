@@ -884,6 +884,30 @@ function backup(from,to){
  const txt=JSON.stringify(data,null,1);try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download=`cuaderno-copia-${from?from+'-a-'+(to||today()):today()}.json`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);toast('Copia descargada')}catch(_){toast('No se pudo descargar el archivo.')}
 }
 const saveClub=(patch,msg)=>{club={...club,...patch,editBy:me.uid,editAt:new Date().toISOString()};setDoc(doc(db,'config','club'),{...club}).catch(err=>toast(errMsg(err)));if(msg)toast(msg)};
+/* agregar varios jugadores pegando una lista */
+const tcase=x=>String(x||'').toLowerCase().replace(/(^|[\s'-])([a-záéíóúñü])/g,(m,a,b)=>a+b.toUpperCase());
+let PIM={order:'na'};
+function parsePlayers(txt){
+ return String(txt||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{let ap='',no='';
+  if(/\t|\s{2,}/.test(l)){const p=l.split(/\t+|\s{2,}/).map(x=>x.trim()).filter(Boolean);ap=p[0];no=p.slice(1).join(' ')}
+  else if(l.includes(',')){const p=l.split(',');ap=p[0].trim();no=p.slice(1).join(' ').trim()}
+  else return tcase(l);
+  return tcase(PIM.order==='an'?`${ap} ${no}`:`${no} ${ap}`).trim()}).filter(Boolean);
+}
+function pimPreview(){const L=parsePlayers(($('#pim_txt')||{}).value);const have=new Set(R.players.map(p=>noAcc(p.name).trim()));const seen=new Set();
+ const rows=L.map(n=>{const k=noAcc(n).trim();const dup=have.has(k)||seen.has(k);seen.add(k);return {n,dup}});const nNew=rows.filter(r=>!r.dup).length;
+ const el=$('#pim_prev');if(el)el.innerHTML=rows.length?`<div class="g-sub" style="margin-bottom:6px">${nNew} para agregar${rows.length-nNew?` · ${rows.length-nNew} ya estaban o se repiten (no se agregan)`:''}</div><div class="pim-list">${rows.map(r=>`<span class="pill ${r.dup?'':'ok'}">${esc(r.n)}${r.dup?' · ya está':''}</span>`).join('')}</div>`:'';
+ const b=$('#pimFrm button[type=submit]');if(b){b.textContent=nNew?`Agregar ${nNew} jugador${nNew>1?'es':''}`:'Agregar';b.disabled=!nNew}}
+function openPlayersImport(){
+ $('#mTitle').textContent='Agregar varios jugadores';
+ $('#mBody').innerHTML=`<form class="form" id="pimFrm" novalidate><div class="fld full"><label for="pim_txt">Pegá la lista, un jugador por renglón</label><textarea id="pim_txt" rows="10" placeholder="ACOSTA&#9;IGNACIO&#10;BAEZ&#9;GONZALO OWEN&#10;o también: Acosta, Ignacio"></textarea><span class="hint">Sirve copiada de Excel o Google Sheets (apellido en una columna y nombre en otra), o escrita “Apellido, Nombre”. Los que ya están en el plantel no se repiten.</span></div>
+ <div class="fld full"><span class="lb">Cómo guardar el nombre</span><div class="seg2"><label><input type="radio" name="pim_order" value="na" ${PIM.order==='na'?'checked':''}><span>Ignacio Acosta</span></label><label><input type="radio" name="pim_order" value="an" ${PIM.order==='an'?'checked':''}><span>Acosta Ignacio</span></label></div><span class="hint">Los mensajes de WhatsApp saludan con la primera palabra del nombre.</span></div>
+ <div class="fld full" id="pim_prev"></div>
+ <div class="formacts"><button type="button" class="btn" data-act="close">Cancelar</button><button type="submit" class="btn primary" disabled>Agregar</button></div></form>`;showModal();
+}
+function savePlayersImport(){const L=parsePlayers($('#pim_txt').value);const have=new Set(R.players.map(p=>noAcc(p.name).trim()));const now=new Date().toISOString();let n=0;
+ L.forEach(name=>{const k=noAcc(name).trim();if(have.has(k))return;have.add(k);setDoc(doc(collection(db,'players')),{name,squad:sq(),by:me.uid,at:now}).catch(err=>toast(errMsg(err)));n++});
+ closeModal();toast(n?`Se agregaron ${n} jugador${n>1?'es':''}. Completá los datos tocando cada uno.`:'No había jugadores nuevos para agregar.')}
 function vConfig(){
  const admin=isAdmin();
  let h=`<div class="bar"><div><h2>Configuración</h2><p>${admin?'Datos del equipo, accesos del cuerpo técnico y tu cuenta.':'Tu cuenta y datos del equipo.'}</p></div></div>`;
@@ -961,7 +985,7 @@ function plRows(){
 }
 function vPlayers(){
  const ps=sortedPlayers();const disp=ps.filter(p=>availability(p.id)[0]==='Disponible').length;
- const h=`<div class="bar"><div><h2>Plantel${squads().length>1?' · '+esc(sqName()):''}</h2><p>${ps.length} ${plural(ps.length,'jugador','jugadores')} · ${disp} ${plural(disp,'disponible','disponibles')}. Tocá un jugador para ver su ficha.</p></div><div class="tools">${ps.length?`<button class="btn" type="button" data-act="pexport">Descargar lista</button>`:''}${addBtn('players','Jugador')}</div></div>`;
+ const h=`<div class="bar"><div><h2>Plantel${squads().length>1?' · '+esc(sqName()):''}</h2><p>${ps.length} ${plural(ps.length,'jugador','jugadores')} · ${disp} ${plural(disp,'disponible','disponibles')}. Tocá un jugador para ver su ficha.</p></div><div class="tools">${ps.length?`<button class="btn" type="button" data-act="pexport">Descargar lista</button>`:''}<button class="btn" type="button" data-act="pimport">Agregar varios</button>${addBtn('players','Jugador')}</div></div>`;
  if(!ps.length&&!S.exPlayers.length)return h+empty('Sin jugadores todavía','Cargá nombre, dorsal y posición. Con eso ya podés tomar asistencia en los entrenamientos.','players','Agregar jugador');
  return h+`<div class="pl-ctl"><div class="fld"><label for="plQ">Buscar</label><input id="plQ" type="search" placeholder="Nombre o dorsal" value="${esc(plQ)}" autocomplete="off"></div><div class="fld"><label for="plF">Mostrar</label><select class="flt" id="plF">${[['todos','Todos'],['disp','Disponibles'],['no','No disponibles'],['baja',`De baja (${S.exPlayers.length})`]].map(o=>`<option value="${o[0]}" ${plF===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div></div><div id="plList">${plRows()}</div>`;
 }
@@ -2547,6 +2571,7 @@ document.addEventListener('click',e=>{
  else if(a==='wremind')openWellRemind();
  else if(a==='gymguide')openGymGuide();
  else if(a==='tsheet')openTestSheet();
+ else if(a==='pimport')openPlayersImport();
  else if(a==='backup')backup(b.dataset.from,b.dataset.to);
  else if(a==='lkreset'){$('#lk_color').value='#163C84'}
  else if(a==='stadd'){$('#stList').insertAdjacentHTML('beforeend',stRow({}))}
@@ -2663,6 +2688,7 @@ document.addEventListener('change',e=>{
  if(e.target.name==='testview'){testView=e.target.value;render()}
  if(e.target.name==='injview'){injView=e.target.value;render()}
  if(e.target.name==='mview'){mView=e.target.value;render()}
+ if(e.target.name==='pim_order'){PIM.order=e.target.value;pimPreview()}
  if(e.target.dataset&&e.target.dataset.alert){const off=new Set(club.alertsOff||[]);if(e.target.checked)off.delete(e.target.dataset.alert);else off.add(e.target.dataset.alert);saveClub({alertsOff:[...off]})}
  if(e.target.id==='yLimit'){club={...club,yellowLimit:+e.target.value};setDoc(doc(db,'config','club'),{...club}).catch(()=>{});render()}
  if(MS&&e.target.closest&&e.target.closest('#msFrm')){msInput(e.target);if(e.target.dataset.subk==='out'||e.target.dataset.subk==='in')renderMatchSheet()}
@@ -2685,6 +2711,7 @@ document.addEventListener('input',e=>{
  if(e.target.dataset&&e.target.dataset.ts!==undefined&&TS){TS.vals[e.target.dataset.ts]=e.target.value}
  if(id==='f_test'){const m=tmeta(e.target.value);const u=$('#f_unit');if(m&&u)u.value=m.unit}
  if(MS&&e.target.closest&&e.target.closest('#msFrm'))msInput(e.target);
+ if(id==='pim_txt')pimPreview();
  if(id==='rutQ'){rutQ=e.target.value;const l=$('#rutList');if(l){const tmp=document.createElement('div');tmp.innerHTML=vRoutines();l.replaceWith(tmp.querySelector('#rutList'))}}
  if(id==='libQ'){libQ=e.target.value;const l=$('#libList');if(l){const tmp=document.createElement('div');tmp.innerHTML=vLib();const nl=tmp.querySelector('#libList');l.replaceWith(nl);hydrateMedia(nl)}}
  if(id==='sesQ'){sesQ=e.target.value;const l=$('#sesList');if(l)l.innerHTML=sesLists()}
@@ -2699,6 +2726,7 @@ document.addEventListener('submit',e=>{
  if(id==='authFrm')return onAuthForm(e);
  if(id==='frm')return submitForm(e);
  if(id==='attFrm')return saveAtt(e);
+ if(id==='pimFrm'){e.preventDefault();return savePlayersImport()}
  if(id==='msFrm'){e.preventDefault();return saveMatchSheet()}
  if(id==='rvFrm'){e.preventDefault();return saveRivalNote(e.target)}
  if(id==='injLogFrm'){e.preventDefault();return injLogAdd(e.target)}
