@@ -986,7 +986,7 @@ function plRows(){
 function vPlayers(){
  const ps=sortedPlayers();const disp=ps.filter(p=>availability(p.id)[0]==='Disponible').length;
  const h=`<div class="bar"><div><h2>Plantel${squads().length>1?' · '+esc(sqName()):''}</h2><p>${ps.length} ${plural(ps.length,'jugador','jugadores')} · ${disp} ${plural(disp,'disponible','disponibles')}. Tocá un jugador para ver su ficha.</p></div><div class="tools">${ps.length?`<button class="btn" type="button" data-act="pexport">Descargar lista</button>`:''}<button class="btn" type="button" data-act="pimport">Agregar varios</button>${addBtn('players','Jugador')}</div></div>`;
- if(!ps.length&&!S.exPlayers.length)return h+empty('Sin jugadores todavía','Cargá nombre, dorsal y posición. Con eso ya podés tomar asistencia en los entrenamientos.','players','Agregar jugador');
+ if(!ps.length&&!S.exPlayers.length)return h+empty('Sin jugadores todavía','Cargá nombre, dorsal y posición, o pegá una lista con “Agregar varios”. Con eso ya podés tomar asistencia en los entrenamientos.','players','Agregar jugador');
  return h+`<div class="pl-ctl"><div class="fld"><label for="plQ">Buscar</label><input id="plQ" type="search" placeholder="Nombre o dorsal" value="${esc(plQ)}" autocomplete="off"></div><div class="fld"><label for="plF">Mostrar</label><select class="flt" id="plF">${[['todos','Todos'],['disp','Disponibles'],['no','No disponibles'],['baja',`De baja (${S.exPlayers.length})`]].map(o=>`<option value="${o[0]}" ${plF===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div></div><div id="plList">${plRows()}</div>`;
 }
 function testTrend(id){
