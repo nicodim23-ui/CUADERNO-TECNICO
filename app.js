@@ -885,7 +885,7 @@ function backup(from,to){
 }
 const saveClub=(patch,msg)=>{club={...club,...patch,editBy:me.uid,editAt:new Date().toISOString()};setDoc(doc(db,'config','club'),{...club}).catch(err=>toast(errMsg(err)));if(msg)toast(msg)};
 /* agregar varios jugadores pegando una lista */
-const tcase=x=>String(x||'').toLowerCase().replace(/(^|[\s'-])([a-záéíóúñü])/g,(m,a,b)=>a+b.toUpperCase());
+const tcase=x=>String(x||'').toLowerCase().replace(/(^|[\s'-])([a-záéíóúñü])/g,(m,a,b)=>a+b.toUpperCase()).replace(/ (De|Del|La|Las|Los|Y) /g,m=>m.toLowerCase());
 let PIM={order:'na'};
 function parsePlayers(txt){
  return String(txt||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{let ap='',no='';
